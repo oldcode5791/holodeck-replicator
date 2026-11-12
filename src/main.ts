@@ -6,11 +6,14 @@ import { packageBatchZip } from './modules/zipper';
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
 const currentSettings: ConversionSettings = {
-  targetFormat: 'image/webp',
+  targetFormat: 'image/gif',
   quality: 0.85,
   preserveAlpha: true,
   matteColor: '#ffffff',
   stripExif: true,
+  removeBackground: true,
+  bgTargetColor: 'auto',
+  bgTolerance: 15,
 };
 
 let queue: ImageQueueItem[] = [];
@@ -46,26 +49,26 @@ app.innerHTML = `
 
     <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
       <!-- Controls Configuration Panel -->
-      <aside class="w-full lg:w-80 bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 p-5 shrink-0 flex flex-col gap-6 overflow-y-auto">
+      <aside class="w-full lg:w-80 bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 p-5 shrink-0 flex flex-col gap-5 overflow-y-auto">
         <div>
           <h2 class="text-xs font-mono uppercase tracking-wider text-cyan-400 mb-3">Replication Parameters</h2>
           
           <!-- Target Format Selection -->
-          <div class="space-y-2 mb-5">
+          <div class="space-y-2 mb-4">
             <div class="flex items-center justify-between">
               <label class="text-xs text-slate-400 font-medium">Output Format</label>
               <button type="button" data-info="format" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
             </div>
             <div class="grid grid-cols-4 gap-1.5">
-              <button data-format="image/webp" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">WebP</button>
+              <button data-format="image/webp" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">WebP</button>
               <button data-format="image/jpeg" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">JPEG</button>
               <button data-format="image/png" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">PNG</button>
-              <button data-format="image/gif" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">GIF</button>
+              <button data-format="image/gif" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">GIF</button>
             </div>
           </div>
 
           <!-- Quality Slider -->
-          <div id="quality-container" class="space-y-1.5 mb-5">
+          <div id="quality-container" class="space-y-1.5 mb-4 opacity-40 pointer-events-none">
             <div class="flex justify-between items-center text-xs">
               <div class="flex items-center gap-1.5">
                 <label class="text-slate-400 font-medium">Compression Quality</label>
@@ -76,15 +79,52 @@ app.innerHTML = `
             <input type="range" id="quality-slider" min="10" max="100" value="85" step="5" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-2 rounded-lg" />
           </div>
 
-          <!-- Transparency & Alpha Controls -->
-          <div class="space-y-3 pt-4 border-t border-slate-800">
+          <!-- Background Knockout (Chroma Key) -->
+          <div class="space-y-3 pt-3 border-t border-slate-800">
             <div class="flex items-center justify-between">
               <div>
                 <div class="flex items-center gap-1.5">
-                  <label class="text-xs font-medium text-slate-200 block">Preserve Transparency</label>
+                  <label class="text-xs font-medium text-slate-200 block">Remove Background</label>
+                  <button type="button" data-info="knockout" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                </div>
+                <span class="text-[11px] text-slate-400 block">Erase background to transparent</span>
+              </div>
+              <input type="checkbox" id="check-knockout" checked class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
+            </div>
+
+            <div id="knockout-controls" class="space-y-2.5 pl-2 border-l-2 border-cyan-500/40">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-400">Target Colour</span>
+                <div class="flex items-center gap-2">
+                  <select id="select-bg-color" class="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-cyan-500">
+                    <option value="auto">Auto (Top-Left Pixel)</option>
+                    <option value="#ffffff">Pure White (#FFF)</option>
+                    <option value="#000000">Pure Black (#000)</option>
+                    <option value="custom">Custom Hex</option>
+                  </select>
+                  <input type="color" id="picker-bg-color" value="#ffffff" class="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer hidden" />
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="text-slate-400">Tolerance</span>
+                  <span id="tolerance-val" class="font-mono text-cyan-400 text-[11px]">15%</span>
+                </div>
+                <input type="range" id="tolerance-slider" min="1" max="60" value="15" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Transparency & Alpha Controls -->
+          <div class="space-y-3 pt-3 border-t border-slate-800">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <label class="text-xs font-medium text-slate-200 block">Preserve Native Alpha</label>
                   <button type="button" data-info="alpha" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
                 </div>
-                <span class="text-[11px] text-slate-400 block">Retain PNG/WebP/GIF alpha channels</span>
+                <span class="text-[11px] text-slate-400 block">Retain pre-existing transparency</span>
               </div>
               <input type="checkbox" id="check-alpha" checked class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
             </div>
@@ -103,7 +143,7 @@ app.innerHTML = `
           </div>
 
           <!-- Maximum Dimensions -->
-          <div class="space-y-2 pt-4 border-t border-slate-800">
+          <div class="space-y-2 pt-3 border-t border-slate-800">
             <div class="flex items-center justify-between">
               <label class="text-xs font-medium text-slate-200 block">Constraint Limits (Optional)</label>
               <button type="button" data-info="limits" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
@@ -121,7 +161,7 @@ app.innerHTML = `
           </div>
         </div>
 
-        <div class="mt-auto pt-4 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-2">
+        <div class="mt-auto pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-2">
           <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
           100% In-Memory Sandbox. Images are processed locally and never transmitted.
         </div>
@@ -168,18 +208,20 @@ app.innerHTML = `
 // Info Copy Registry
 const infoCopy: Record<string, string> = {
   format: `<strong class="text-white block mb-1">Export Format Guide</strong>
-           <b class="text-cyan-400">WebP:</b> Modern web format with full 8-bit alpha transparency.<br/>
-           <b class="text-amber-400">JPEG:</b> Universally supported lossy format (no transparency).<br/>
+           <b class="text-cyan-400">WebP:</b> Modern web compression with 8-bit alpha.<br/>
+           <b class="text-amber-400">JPEG:</b> Standard universal format (no transparency).<br/>
            <b class="text-emerald-400">PNG:</b> Lossless image fidelity with full alpha channel.<br/>
            <b class="text-purple-400">GIF:</b> 256-colour raster image with 1-bit transparent index.`,
   quality: `<strong class="text-white block mb-1">Quality Encoding</strong>
-            Applies lossy compression to WebP and JPEG. 80–85% provides great reductions with imperceptible loss. Disabled for lossless PNG and palette-quantised GIF.`,
+            Applies lossy compression to WebP and JPEG. Disabled for lossless PNG and palette-quantised GIF.`,
+  knockout: `<strong class="text-white block mb-1">Background Knockout</strong>
+             Scans pixel colors and wipes matching pixels to 100% transparency. Set to Auto to sample the top-left pixel, or choose pure white/black/custom with adjustable tolerance.`,
   alpha: `<strong class="text-white block mb-1">Alpha Channel Retention</strong>
-          When checked, transparent backgrounds in PNG, WebP, or GIF are preserved. For JPEG or when disabled, transparent regions flatten to the fallback matte colour.`,
+          Preserves pre-existing transparent areas from input PNG/WebP/GIF files.`,
   matte: `<strong class="text-white block mb-1">Matte Background</strong>
-          Fills transparent regions with a solid background colour to prevent black canvas artefacts when converting to JPEG or flattening alpha.`,
+          Fills transparent regions with a solid color when converting to JPEG.`,
   limits: `<strong class="text-white block mb-1">Aspect-Ratio Scaling</strong>
-           Enter a pixel ceiling to constrain oversized images. Aspect ratio is strictly preserved; images smaller than limits are never upscaled.`,
+           Constrain oversized images to a width/height ceiling while strictly maintaining proportions.`,
 };
 
 // Viewport-Clamped Popover Controller
@@ -247,6 +289,12 @@ const checkAlpha = document.getElementById('check-alpha') as HTMLInputElement;
 const matteContainer = document.getElementById('matte-container') as HTMLDivElement;
 const inputMaxW = document.getElementById('input-max-w') as HTMLInputElement;
 const inputMaxH = document.getElementById('input-max-h') as HTMLInputElement;
+const checkKnockout = document.getElementById('check-knockout') as HTMLInputElement;
+const knockoutControls = document.getElementById('knockout-controls') as HTMLDivElement;
+const selectBgColor = document.getElementById('select-bg-color') as HTMLSelectElement;
+const pickerBgColor = document.getElementById('picker-bg-color') as HTMLInputElement;
+const toleranceSlider = document.getElementById('tolerance-slider') as HTMLInputElement;
+const toleranceVal = document.getElementById('tolerance-val') as HTMLSpanElement;
 
 const updateSettingsUI = () => {
   const isLosslessOrPalette = currentSettings.targetFormat === 'image/png' || currentSettings.targetFormat === 'image/gif';
@@ -256,10 +304,16 @@ const updateSettingsUI = () => {
     qualityContainer.classList.remove('opacity-40', 'pointer-events-none');
   }
 
-  if (currentSettings.targetFormat === 'image/jpeg' || !currentSettings.preserveAlpha) {
+  if (currentSettings.targetFormat === 'image/jpeg' || (!currentSettings.preserveAlpha && !currentSettings.removeBackground)) {
     matteContainer.classList.remove('hidden');
   } else {
     matteContainer.classList.add('hidden');
+  }
+
+  if (currentSettings.removeBackground) {
+    knockoutControls.classList.remove('hidden');
+  } else {
+    knockoutControls.classList.add('hidden');
   }
 };
 
@@ -346,6 +400,8 @@ const processQueue = async () => {
         item.convertedBlob = convertedBlob;
         item.convertedSize = convertedBlob.size;
         item.dimensions = dimensions;
+        // Update thumbnail to converted preview so the transparent knockout is visible in the UI
+        item.previewUrl = URL.createObjectURL(convertedBlob);
         item.status = 'completed';
       } catch (err: any) {
         console.error(err);
@@ -412,6 +468,47 @@ qualitySlider.addEventListener('change', () => {
 checkAlpha.addEventListener('change', (e) => {
   currentSettings.preserveAlpha = (e.target as HTMLInputElement).checked;
   updateSettingsUI();
+  queue.forEach(q => q.status = 'idle');
+  renderQueue();
+  processQueue();
+});
+
+checkKnockout.addEventListener('change', (e) => {
+  currentSettings.removeBackground = (e.target as HTMLInputElement).checked;
+  updateSettingsUI();
+  queue.forEach(q => q.status = 'idle');
+  renderQueue();
+  processQueue();
+});
+
+selectBgColor.addEventListener('change', () => {
+  const val = selectBgColor.value;
+  if (val === 'custom') {
+    pickerBgColor.classList.remove('hidden');
+    currentSettings.bgTargetColor = pickerBgColor.value;
+  } else {
+    pickerBgColor.classList.add('hidden');
+    currentSettings.bgTargetColor = val;
+  }
+  queue.forEach(q => q.status = 'idle');
+  renderQueue();
+  processQueue();
+});
+
+pickerBgColor.addEventListener('input', () => {
+  currentSettings.bgTargetColor = pickerBgColor.value;
+  queue.forEach(q => q.status = 'idle');
+  renderQueue();
+  processQueue();
+});
+
+toleranceSlider.addEventListener('input', (e) => {
+  const val = parseInt((e.target as HTMLInputElement).value, 10);
+  toleranceVal.textContent = `${val}%`;
+  currentSettings.bgTolerance = val;
+});
+
+toleranceSlider.addEventListener('change', () => {
   queue.forEach(q => q.status = 'idle');
   renderQueue();
   processQueue();

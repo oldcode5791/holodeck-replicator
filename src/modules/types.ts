@@ -10,6 +10,9 @@ export interface ConversionSettings {
   stripExif: boolean;
   maxWidth?: number;
   maxHeight?: number;
+  removeBackground: boolean;
+  bgTargetColor: string; // 'auto', or hex like '#ffffff'
+  bgTolerance: number; // 0 to 100
 }
 
 export type ConversionStatus = 'idle' | 'converting' | 'completed' | 'error';
