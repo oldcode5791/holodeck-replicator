@@ -5,6 +5,7 @@ import { packageBatchZip } from './modules/zipper';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
+// Default transcoding & Magic Wand background knockout settings
 const currentSettings: ConversionSettings = {
   targetFormat: 'image/gif',
   quality: 0.85,
@@ -19,13 +20,15 @@ const currentSettings: ConversionSettings = {
   samplePoints: [],
 };
 
+// In-memory batch queue and active Eyedropper modal canvas reference
 let queue: ImageQueueItem[] = [];
 let isProcessing = false;
 let sourceCanvasForEyedropper: HTMLCanvasElement | null = null;
 
+// Render application shell with comprehensive everyday-user info triggers and native title tooltips
 app.innerHTML = `
   <div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
-    <!-- Top Navigation -->
+    <!-- Top Navigation Header -->
     <header class="h-16 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 z-20 backdrop-blur">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-mono font-bold text-lg shadow-sm">
@@ -36,15 +39,18 @@ app.innerHTML = `
             Holodeck Replicator
             <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400">v1.5</span>
           </span>
-          <p class="text-xs text-slate-400 hidden sm:block">100% Client-Side Image Matrix & Format Transcoder</p>
+          <p class="text-xs text-slate-400 hidden sm:block">100% Client-Side Image Matrix &amp; Format Transcoder</p>
         </div>
       </div>
 
       <div class="flex items-center gap-3">
-        <button id="btn-clear-queue" class="hidden text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 px-3.5 rounded-lg border border-slate-700 transition-colors">
+        <a href="https://apps.the-lal.net" title="Return to the full the-lal.net browser utility directory" class="text-xs text-slate-400 hover:text-cyan-400 transition-colors hidden sm:inline">
+          &larr; App Showcase
+        </a>
+        <button id="btn-clear-queue" title="Remove all images from the current conversion queue and free browser memory" class="hidden text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 px-3.5 rounded-lg border border-slate-700 transition-colors">
           Clear All
         </button>
-        <button id="btn-batch-download" class="hidden text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white py-2 px-4 rounded-lg shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5">
+        <button id="btn-batch-download" title="Bundle all converted images into a single ZIP file for immediate download" class="hidden text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white py-2 px-4 rounded-lg shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
           Download All (ZIP)
         </button>
@@ -52,35 +58,35 @@ app.innerHTML = `
     </header>
 
     <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
-      <!-- Controls Configuration Panel -->
+      <!-- Left Sidebar: Replication & Background Removal Controls -->
       <aside class="w-full lg:w-80 bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 p-5 shrink-0 flex flex-col gap-5 overflow-y-auto">
         <div>
           <h2 class="text-xs font-mono uppercase tracking-wider text-cyan-400 mb-3">Replication Parameters</h2>
-          
-          <!-- Target Format Selection -->
+
+          <!-- Target Output Format Selection -->
           <div class="space-y-2 mb-4">
             <div class="flex items-center justify-between">
               <label class="text-xs text-slate-400 font-medium">Output Format</label>
-              <button type="button" data-info="format" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+              <button type="button" data-info="format" aria-label="Output format help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
             </div>
             <div class="grid grid-cols-4 gap-1.5">
-              <button data-format="image/webp" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">WebP</button>
-              <button data-format="image/jpeg" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">JPEG</button>
-              <button data-format="image/png" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">PNG</button>
-              <button data-format="image/gif" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">GIF</button>
+              <button data-format="image/webp" title="Convert to modern WebP (small files with smooth transparency)" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">WebP</button>
+              <button data-format="image/jpeg" title="Convert to universal JPEG (best for photos; no transparent background)" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">JPEG</button>
+              <button data-format="image/png" title="Convert to lossless PNG (crisp edges with full transparency)" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">PNG</button>
+              <button data-format="image/gif" title="Convert to static or animated GIF with transparent background support" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">GIF</button>
             </div>
           </div>
 
-          <!-- Quality Slider -->
+          <!-- Compression Quality Slider (Active for WebP & JPEG) -->
           <div id="quality-container" class="space-y-1.5 mb-4 opacity-40 pointer-events-none">
             <div class="flex justify-between items-center text-xs">
               <div class="flex items-center gap-1.5">
                 <label class="text-slate-400 font-medium">Compression Quality</label>
-                <button type="button" data-info="quality" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                <button type="button" data-info="quality" aria-label="Compression quality help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
               </div>
               <span id="quality-val" class="font-mono text-cyan-400">85%</span>
             </div>
-            <input type="range" id="quality-slider" min="10" max="100" value="85" step="5" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-2 rounded-lg" />
+            <input type="range" id="quality-slider" min="10" max="100" value="85" step="5" title="Adjust image quality vs. file size for WebP and JPEG exports" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-2 rounded-lg" />
           </div>
 
           <!-- Background Knockout (Multi-Point Eyedropper & Edge Defringe) -->
@@ -89,61 +95,73 @@ app.innerHTML = `
               <div>
                 <div class="flex items-center gap-1.5">
                   <label class="text-xs font-medium text-slate-200 block">Remove Background</label>
-                  <button type="button" data-info="knockout" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                  <button type="button" data-info="knockout" aria-label="Background removal help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
                 </div>
                 <span class="text-[11px] text-slate-400 block">Erase background to transparent</span>
               </div>
-              <input type="checkbox" id="check-knockout" checked class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
+              <input type="checkbox" id="check-knockout" checked title="Toggle automatic or eyedropper-guided background removal" class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
             </div>
 
             <div id="knockout-controls" class="space-y-2.5 pl-2.5 border-l-2 border-cyan-500/40">
-              <!-- Eyedropper Button & Sample Counter -->
+              <!-- Multi-Point Eyedropper Launcher & Sample Reset -->
               <div class="flex items-center justify-between gap-2">
-                <button type="button" id="btn-open-eyedropper" class="flex-1 bg-cyan-950/70 hover:bg-cyan-900/70 text-cyan-300 border border-cyan-500/40 rounded-lg py-1.5 px-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors">
+                <button type="button" id="btn-open-eyedropper" title="Open interactive canvas to click exact background colors or enclosed pockets to erase" class="flex-1 bg-cyan-950/70 hover:bg-cyan-900/70 text-cyan-300 border border-cyan-500/40 rounded-lg py-1.5 px-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
                   Eyedropper (<span id="sample-count-badge">0</span>)
                 </button>
-                <button type="button" id="btn-reset-samples" title="Clear sampled points" class="hidden px-2 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300">
+                <button type="button" id="btn-reset-samples" title="Clear all manually clicked Eyedropper points and return to Fallback Mode" class="hidden px-2 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300">
                   Reset
                 </button>
               </div>
 
-              <!-- Preset Dropdown -->
+              <!-- Fallback Color Detection Mode -->
               <div class="flex items-center justify-between text-xs">
-                <span class="text-slate-400">Fallback Mode</span>
                 <div class="flex items-center gap-1.5">
-                  <select id="select-bg-color" class="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-cyan-500">
+                  <span class="text-slate-400">Fallback Mode</span>
+                  <button type="button" data-info="fallback" aria-label="Fallback mode help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <select id="select-bg-color" title="Choose which background color to erase when no Eyedropper points are picked" class="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-cyan-500">
                     <option value="auto">Auto (Top-Left)</option>
                     <option value="#ffffff">Pure White (#FFF)</option>
                     <option value="#000000">Pure Black (#000)</option>
                     <option value="custom">Custom Hex</option>
                   </select>
-                  <input type="color" id="picker-bg-color" value="#ffffff" class="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer hidden" />
+                  <input type="color" id="picker-bg-color" value="#ffffff" title="Pick a custom background color to remove" class="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer hidden" />
                 </div>
               </div>
 
               <!-- Contiguous Magic Wand Toggle -->
               <div class="flex items-center justify-between text-xs">
-                <span class="text-slate-400">Contiguous (Magic Wand)</span>
-                <input type="checkbox" id="check-contiguous" checked class="w-3.5 h-3.5 accent-cyan-500 rounded cursor-pointer" />
+                <div class="flex items-center gap-1.5">
+                  <span class="text-slate-400">Contiguous (Magic Wand)</span>
+                  <button type="button" data-info="contiguous" aria-label="Contiguous mode help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                </div>
+                <input type="checkbox" id="check-contiguous" checked title="Checked: only erases connected outer background. Unchecked: erases that color everywhere in the image." class="w-3.5 h-3.5 accent-cyan-500 rounded cursor-pointer" />
               </div>
 
-              <!-- Tolerance Slider -->
+              <!-- Color Match Tolerance Slider -->
               <div class="space-y-1">
                 <div class="flex justify-between items-center text-xs">
-                  <span class="text-slate-400">Tolerance</span>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-slate-400">Tolerance</span>
+                    <button type="button" data-info="tolerance" aria-label="Tolerance help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                  </div>
                   <span id="tolerance-val" class="font-mono text-cyan-400 text-[11px]">15%</span>
                 </div>
-                <input type="range" id="tolerance-slider" min="1" max="60" value="15" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+                <input type="range" id="tolerance-slider" min="1" max="60" value="15" step="1" title="Higher values erase a wider range of similar shades and shadows" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
               </div>
 
               <!-- Edge Defringe Slider -->
               <div class="space-y-1">
                 <div class="flex justify-between items-center text-xs">
-                  <span class="text-slate-400">Edge Defringe (Halo)</span>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-slate-400">Edge Defringe (Halo)</span>
+                    <button type="button" data-info="defringe" aria-label="Edge defringe help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                  </div>
                   <span id="defringe-val" class="font-mono text-cyan-400 text-[11px]">0 px</span>
                 </div>
-                <input type="range" id="defringe-slider" min="0" max="3" value="0" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+                <input type="range" id="defringe-slider" min="0" max="3" value="0" step="1" title="Shave 1–3 pixels off edges to clean up white or dark outline halos" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
               </div>
             </div>
           </div>
@@ -154,40 +172,40 @@ app.innerHTML = `
               <div>
                 <div class="flex items-center gap-1.5">
                   <label class="text-xs font-medium text-slate-200 block">Preserve Native Alpha</label>
-                  <button type="button" data-info="alpha" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                  <button type="button" data-info="alpha" aria-label="Preserve alpha help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
                 </div>
                 <span class="text-[11px] text-slate-400 block">Retain pre-existing transparency</span>
               </div>
-              <input type="checkbox" id="check-alpha" checked class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
+              <input type="checkbox" id="check-alpha" checked title="Keep existing transparent areas intact when converting PNG, WebP, or GIF files" class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
             </div>
 
-            <!-- Matte Color Fallback -->
+            <!-- Solid Matte Fallback (Shown for JPEG or opaque exports) -->
             <div id="matte-container" class="space-y-1.5 pt-2 hidden">
               <div class="flex items-center justify-between">
                 <label class="text-xs text-slate-400 font-medium">Fallback Matte</label>
-                <button type="button" data-info="matte" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                <button type="button" data-info="matte" aria-label="Fallback matte help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
               </div>
               <div class="grid grid-cols-2 gap-2 text-xs">
-                <button data-matte="#ffffff" class="matte-btn py-1.5 px-2 rounded-lg border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-medium">White Matte</button>
-                <button data-matte="#000000" class="matte-btn py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 font-medium">Black Matte</button>
+                <button data-matte="#ffffff" title="Fill transparent areas with solid white" class="matte-btn py-1.5 px-2 rounded-lg border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-medium">White Matte</button>
+                <button data-matte="#000000" title="Fill transparent areas with solid black" class="matte-btn py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 font-medium">Black Matte</button>
               </div>
             </div>
           </div>
 
-          <!-- Maximum Dimensions -->
+          <!-- Optional Aspect-Ratio-Preserving Resize Ceilings -->
           <div class="space-y-2 pt-3 border-t border-slate-800">
             <div class="flex items-center justify-between">
               <label class="text-xs font-medium text-slate-200 block">Constraint Limits (Optional)</label>
-              <button type="button" data-info="limits" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+              <button type="button" data-info="limits" aria-label="Resize limits help" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <span class="text-[10px] text-slate-500 block mb-1">Max Width (px)</span>
-                <input type="number" id="input-max-w" placeholder="Auto" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
+                <input type="number" id="input-max-w" placeholder="Auto" title="Shrink images wider than this pixel width while keeping proportions" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
               </div>
               <div>
                 <span class="text-[10px] text-slate-500 block mb-1">Max Height (px)</span>
-                <input type="number" id="input-max-h" placeholder="Auto" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
+                <input type="number" id="input-max-h" placeholder="Auto" title="Shrink images taller than this pixel height while keeping proportions" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
               </div>
             </div>
           </div>
@@ -199,16 +217,15 @@ app.innerHTML = `
         </div>
       </aside>
 
-      <!-- Main Stage / File Matrix Queue -->
+      <!-- Main Stage: Drag/Drop/Paste Target & Live Conversion Queue -->
       <main class="flex-1 p-6 overflow-y-auto flex flex-col items-center justify-start relative">
-        <!-- Drag & Drop / Paste Zone -->
-        <div id="drop-target" class="w-full max-w-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 rounded-3xl p-8 text-center transition-all bg-slate-900/50 flex flex-col items-center justify-center cursor-pointer mb-6">
+        <div id="drop-target" title="Drop image files here, click Choose Files, or press Ctrl+V anywhere on the page to paste a screenshot" class="w-full max-w-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 rounded-3xl p-8 text-center transition-all bg-slate-900/50 flex flex-col items-center justify-center cursor-pointer mb-6">
           <div class="w-14 h-14 rounded-2xl bg-cyan-600/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-3 pointer-events-none">
             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
           </div>
-          <h3 class="text-base font-semibold text-white mb-1 pointer-events-none">Drag & Drop or Paste (<kbd class="text-xs font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-cyan-300">Ctrl+V</kbd>)</h3>
+          <h3 class="text-base font-semibold text-white mb-1 pointer-events-none">Drag &amp; Drop or Paste (<kbd class="text-xs font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-cyan-300">Ctrl+V</kbd>)</h3>
           <p class="text-xs text-slate-400 max-w-sm mb-4 pointer-events-none">Drop or paste JPG, PNG, WebP, animated GIF, Apple HEIC, or TIFF files for immediate client-side conversion.</p>
-          <label class="cursor-pointer bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs py-2 px-5 rounded-xl shadow-lg shadow-cyan-600/20 transition-all pointer-events-auto">
+          <label title="Browse your device for one or more images to convert" class="cursor-pointer bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs py-2 px-5 rounded-xl shadow-lg shadow-cyan-600/20 transition-all pointer-events-auto">
             Choose Files
             <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,image/tiff,.heic,.heif,.gif,.tif,.tiff" class="hidden" />
           </label>
@@ -230,14 +247,14 @@ app.innerHTML = `
             </h3>
             <p class="text-xs text-slate-400">Click multiple background pockets and fine-tune tolerance or edge defringe live.</p>
           </div>
-          <button id="btn-close-eyedropper" class="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors">
+          <button id="btn-close-eyedropper" title="Close Eyedropper and re-process queue with selected points" class="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
           </button>
         </div>
 
         <!-- Live Checkerboard Preview Stage -->
         <div class="relative transparency-check border border-slate-700 rounded-xl overflow-hidden flex items-center justify-center max-h-[55vh] p-3">
-          <canvas id="eyedropper-canvas" class="max-w-full max-h-[50vh] object-contain cursor-crosshair shadow-xl"></canvas>
+          <canvas id="eyedropper-canvas" title="Click any background color or enclosed loop (like inside letters) to make it transparent" class="max-w-full max-h-[50vh] object-contain cursor-crosshair shadow-xl"></canvas>
         </div>
 
         <!-- Live Modal Tuning Bar -->
@@ -247,7 +264,7 @@ app.innerHTML = `
               <span class="text-slate-400 font-medium">Live Tolerance</span>
               <span id="modal-tolerance-val" class="font-mono text-cyan-400">15%</span>
             </div>
-            <input type="range" id="modal-tolerance-slider" min="1" max="60" value="15" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+            <input type="range" id="modal-tolerance-slider" min="1" max="60" value="15" step="1" title="Drag to expand or tighten how many similar background shades are removed" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
           </div>
 
           <div class="space-y-1">
@@ -255,28 +272,28 @@ app.innerHTML = `
               <span class="text-slate-400 font-medium">Edge Defringe (Remove Halo)</span>
               <span id="modal-defringe-val" class="font-mono text-cyan-400">0 px</span>
             </div>
-            <input type="range" id="modal-defringe-slider" min="0" max="3" value="0" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+            <input type="range" id="modal-defringe-slider" min="0" max="3" value="0" step="1" title="Trim 1–3 pixels from cut-out edges to remove white or dark anti-aliasing outlines" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
           </div>
         </div>
 
-        <!-- Bottom Action Bar -->
+        <!-- Bottom Modal Action Bar -->
         <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
           <div class="flex items-center gap-3 text-slate-400">
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5" title="Live color readout directly under your cursor">
               <span>Cursor:</span>
               <span id="hover-swatch" class="w-4 h-4 rounded border border-slate-600 inline-block bg-transparent"></span>
               <span id="hover-hex" class="font-mono text-slate-200">—</span>
             </div>
-            <button type="button" id="btn-undo-point" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors">
+            <button type="button" id="btn-undo-point" title="Remove the most recently clicked Eyedropper point" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors">
               Undo Last
             </button>
-            <button type="button" id="btn-clear-points" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 transition-colors">
+            <button type="button" id="btn-clear-points" title="Clear all clicked Eyedropper points on this image" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 transition-colors">
               Clear All
             </button>
           </div>
 
-          <button type="button" id="btn-apply-eyedropper" class="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2 px-5 rounded-xl shadow-lg shadow-cyan-600/30 transition-all">
-            Apply & Replicate
+          <button type="button" id="btn-apply-eyedropper" title="Save these transparency points and re-encode every image in the queue" class="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2 px-5 rounded-xl shadow-lg shadow-cyan-600/30 transition-all">
+            Apply &amp; Replicate
           </button>
         </div>
       </div>
@@ -284,10 +301,11 @@ app.innerHTML = `
 
     <!-- Developer Support Badge -->
     <div class="fixed bottom-4 right-4 z-40">
-      <a 
-        href="https://buymeacoffee.com/curiouslyso" 
-        target="_blank" 
-        rel="noopener noreferrer" 
+      <a
+        href="https://buymeacoffee.com/curiouslyso"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Support independent privacy-first browser tools on Buy Me a Coffee"
         class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-amber-300 font-medium text-xs border border-amber-500/30 hover:border-amber-400/60 shadow-lg shadow-black/50 backdrop-blur transition-all duration-200 hover:scale-105"
       >
         <span class="text-sm select-none">☕</span>
@@ -295,31 +313,40 @@ app.innerHTML = `
       </a>
     </div>
 
-    <!-- Global Viewport-Clamped Popover -->
+    <!-- Global Viewport-Clamped Popover Container -->
     <div id="global-info-popover"></div>
   </div>
 `;
 
-// Info Copy Registry
+// Plain-English Help Copy Registry for Every Info Popover Trigger
 const infoCopy: Record<string, string> = {
   format: `<strong class="text-white block mb-1">Export Format Guide</strong>
-           <b class="text-cyan-400">WebP:</b> Modern web compression with 8-bit alpha.<br/>
-           <b class="text-amber-400">JPEG:</b> Standard universal format (no transparency).<br/>
-           <b class="text-emerald-400">PNG:</b> Lossless image fidelity with full alpha channel.<br/>
-           <b class="text-purple-400">GIF:</b> Static or animated 256-colour raster with 1-bit transparency.`,
-  quality: `<strong class="text-white block mb-1">Quality Encoding</strong>
-            Applies lossy compression to WebP and JPEG. Disabled for lossless PNG and palette-quantised GIF.`,
-  knockout: `<strong class="text-white block mb-1">Multi-Point Eyedropper & Defringe</strong>
-             Click multiple areas to erase enclosed loops. Use <b>Edge Defringe</b> (1–3 px) to shave off lingering white/black anti-aliasing fringes around edges.`,
-  alpha: `<strong class="text-white block mb-1">Alpha Channel Retention</strong>
-          Preserves pre-existing transparent areas from input PNG/WebP/GIF files.`,
-  matte: `<strong class="text-white block mb-1">Matte Background</strong>
-          Fills transparent regions with a solid color when converting to JPEG.`,
-  limits: `<strong class="text-white block mb-1">Aspect-Ratio Scaling</strong>
-           Constrain oversized images to a width/height ceiling while strictly maintaining proportions.`,
+           <b class="text-cyan-400">WebP:</b> Modern web compression with smooth transparency.<br/>
+           <b class="text-amber-400">JPEG:</b> Universal photo format (no transparent background).<br/>
+           <b class="text-emerald-400">PNG:</b> Lossless crisp graphics with full transparency.<br/>
+           <b class="text-purple-400">GIF:</b> Static or animated 256-colour graphic with transparent cutout support.`,
+  quality: `<strong class="text-white block mb-1">Compression Quality</strong>
+            Controls file size vs. visual sharpness for WebP and JPEG. Disabled for lossless PNG and palette-quantised GIF.`,
+  knockout: `<strong class="text-white block mb-1">Multi-Point Eyedropper &amp; Defringe</strong>
+             Click <b>Eyedropper</b> to pick multiple background areas (including inside letters like O or A). Use <b>Edge Defringe</b> to shave off lingering white/black outline halos.`,
+  fallback: `<strong class="text-white block mb-1">Fallback Background Mode</strong>
+             Used automatically before you pick custom Eyedropper points. <b>Auto (Top-Left)</b> samples the top-left corner pixel of each image.`,
+  contiguous: `<strong class="text-white block mb-1">Contiguous (Magic Wand)</strong>
+               <b>Checked:</b> Only erases connected outer background pixels so matching colours inside your subject stay safe.<br/>
+               <b>Unchecked:</b> Erases that colour everywhere across the entire image.`,
+  tolerance: `<strong class="text-white block mb-1">Colour Tolerance</strong>
+              How close a pixel's shade must be to be erased. Increase this (15%–35%) to clean up JPEG compression noise or soft shadows.`,
+  defringe: `<strong class="text-white block mb-1">Edge Defringe (Halo Removal)</strong>
+             Trims 1–3 pixels around cut-out edges to eliminate leftover white or black anti-aliasing outlines.`,
+  alpha: `<strong class="text-white block mb-1">Preserve Native Alpha</strong>
+          Keeps pre-existing transparent areas from input PNG, WebP, or GIF files intact.`,
+  matte: `<strong class="text-white block mb-1">Fallback Matte Colour</strong>
+          Fills transparent regions with solid white or black when exporting to JPEG (which does not support transparency).`,
+  limits: `<strong class="text-white block mb-1">Optional Size Limits</strong>
+           Automatically scales down oversized images to fit within a maximum pixel width or height while preserving aspect ratio.`,
 };
 
-// Viewport-Clamped Popover Controller
+// Viewport-Clamped Popover Positioning Controller
 const popover = document.getElementById('global-info-popover') as HTMLDivElement;
 
 const showPopover = (trigger: HTMLElement) => {
@@ -353,6 +380,7 @@ const hidePopover = () => {
   popover.classList.remove('visible');
 };
 
+// Bind hover, keyboard focus, and tap listeners to every info badge
 document.querySelectorAll('.info-trigger').forEach((btn) => {
   const el = btn as HTMLElement;
   el.addEventListener('mouseenter', () => showPopover(el));
@@ -371,7 +399,7 @@ document.querySelectorAll('.info-trigger').forEach((btn) => {
 
 document.addEventListener('click', hidePopover);
 
-// Element References
+// Cached DOM Element References
 const fileInput = document.getElementById('file-input') as HTMLInputElement;
 const dropTarget = document.getElementById('drop-target') as HTMLDivElement;
 const queueGrid = document.getElementById('queue-grid') as HTMLDivElement;
@@ -397,7 +425,7 @@ const btnOpenEyedropper = document.getElementById('btn-open-eyedropper') as HTML
 const sampleCountBadge = document.getElementById('sample-count-badge') as HTMLSpanElement;
 const btnResetSamples = document.getElementById('btn-reset-samples') as HTMLButtonElement;
 
-// Eyedropper Modal Elements
+// Eyedropper Modal DOM Element References
 const eyedropperModal = document.getElementById('eyedropper-modal') as HTMLDivElement;
 const eyedropperCanvas = document.getElementById('eyedropper-canvas') as HTMLCanvasElement;
 const btnCloseEyedropper = document.getElementById('btn-close-eyedropper') as HTMLButtonElement;
@@ -412,6 +440,7 @@ const modalDefringeVal = document.getElementById('modal-defringe-val') as HTMLSp
 const hoverSwatch = document.getElementById('hover-swatch') as HTMLSpanElement;
 const hoverHex = document.getElementById('hover-hex') as HTMLSpanElement;
 
+// Keep sidebar and modal tolerance sliders synchronized
 const syncToleranceUI = (val: number) => {
   currentSettings.bgTolerance = val;
   toleranceSlider.value = String(val);
@@ -420,6 +449,7 @@ const syncToleranceUI = (val: number) => {
   modalToleranceVal.textContent = `${val}%`;
 };
 
+// Keep sidebar and modal edge-defringe sliders synchronized
 const syncDefringeUI = (val: number) => {
   currentSettings.bgDefringe = val;
   defringeSlider.value = String(val);
@@ -428,6 +458,7 @@ const syncDefringeUI = (val: number) => {
   modalDefringeVal.textContent = `${val} px`;
 };
 
+// Update sample point counter badges across sidebar and Eyedropper modal
 const updateSampleCounters = () => {
   const count = currentSettings.samplePoints.length;
   sampleCountBadge.textContent = String(count);
@@ -439,6 +470,7 @@ const updateSampleCounters = () => {
   }
 };
 
+// Redraw the interactive Eyedropper canvas with live knockout preview and numbered pin markers
 const renderEyedropperPreview = () => {
   if (!sourceCanvasForEyedropper) return;
   const ctx = eyedropperCanvas.getContext('2d', { alpha: true });
@@ -456,6 +488,7 @@ const renderEyedropperPreview = () => {
     applyBackgroundKnockout(ctx, w, h, currentSettings);
   }
 
+  // Draw numbered cyan target reticles on each clicked sample coordinate
   currentSettings.samplePoints.forEach((pt, idx) => {
     const px = pt.x * w;
     const py = pt.y * h;
@@ -477,6 +510,7 @@ const renderEyedropperPreview = () => {
   updateSampleCounters();
 };
 
+// Open the Multi-Point Eyedropper modal for a specific queue item
 const openEyedropperFor = async (item: ImageQueueItem) => {
   const prepared = await prepareImageSource(item.file);
   sourceCanvasForEyedropper = prepared.frames[0].canvas;
@@ -498,6 +532,7 @@ const closeEyedropper = () => {
 const rgbToHex = (r: number, g: number, b: number) =>
   '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
 
+// Live cursor RGB color inspection inside the Eyedropper modal
 eyedropperCanvas.addEventListener('mousemove', (e) => {
   if (!sourceCanvasForEyedropper) return;
   const rect = eyedropperCanvas.getBoundingClientRect();
@@ -515,6 +550,7 @@ eyedropperCanvas.addEventListener('mousemove', (e) => {
   hoverHex.textContent = hex.toUpperCase();
 });
 
+// Record clicked sample point and update live transparency preview
 eyedropperCanvas.addEventListener('click', (e) => {
   if (!sourceCanvasForEyedropper) return;
   const rect = eyedropperCanvas.getBoundingClientRect();
@@ -590,6 +626,7 @@ btnResetSamples.addEventListener('click', () => {
   processQueue();
 });
 
+// Enable/disable conditional sidebar controls based on active format and alpha flags
 const updateSettingsUI = () => {
   const isLosslessOrPalette = currentSettings.targetFormat === 'image/png' || currentSettings.targetFormat === 'image/gif';
   if (isLosslessOrPalette) {
@@ -613,6 +650,7 @@ const updateSettingsUI = () => {
   updateSampleCounters();
 };
 
+// Render cards for every queued file along with size savings, download buttons, and tooltips
 const renderQueue = () => {
   if (queue.length === 0) {
     queueGrid.innerHTML = '';
@@ -631,15 +669,15 @@ const renderQueue = () => {
 
   queueGrid.innerHTML = queue.map(item => `
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex gap-4 items-center relative overflow-hidden group">
-      <!-- Checkerboard preview box -->
+      <!-- Checkerboard Transparency Preview Box -->
       <div class="w-20 h-20 rounded-xl overflow-hidden shrink-0 transparency-check border border-slate-700/60 flex items-center justify-center relative group/thumb">
         <img src="${item.previewUrl}" alt="Preview" class="w-full h-full object-contain select-none" />
-        <button data-sample="${item.id}" title="Select transparent areas with Eyedropper" class="btn-sample-item absolute bottom-1 right-1 bg-slate-900/90 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-slate-700 rounded-md p-1 opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-md">
+        <button data-sample="${item.id}" title="Open Eyedropper on this image to click specific background colors to make transparent" class="btn-sample-item absolute bottom-1 right-1 bg-slate-900/90 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-slate-700 rounded-md p-1 opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-md">
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
         </button>
       </div>
 
-      <!-- Details -->
+      <!-- File Metadata & Conversion Status -->
       <div class="flex-1 min-w-0">
         <h4 class="text-xs font-semibold text-white truncate mb-1" title="${item.originalName}">${item.originalName}</h4>
         <div class="text-[11px] text-slate-400 flex items-center gap-2 mb-2">
@@ -653,7 +691,6 @@ const renderQueue = () => {
           ` : ''}
         </div>
 
-        <!-- Status / Action -->
         ${item.status === 'converting' ? `
           <div class="text-[11px] font-mono text-cyan-400 animate-pulse flex items-center gap-1.5">
             <svg class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
@@ -663,11 +700,11 @@ const renderQueue = () => {
 
         ${item.status === 'completed' ? `
           <div class="flex items-center gap-2">
-            <button data-download="${item.id}" class="btn-single-download text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium py-1 px-3 rounded-lg border border-slate-700 hover:border-cyan-500/40 transition-all inline-flex items-center gap-1">
+            <button data-download="${item.id}" title="Download this converted file directly to your device" class="btn-single-download text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium py-1 px-3 rounded-lg border border-slate-700 hover:border-cyan-500/40 transition-all inline-flex items-center gap-1">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
               Save ${getExtensionForFormat(currentSettings.targetFormat).toUpperCase()}
             </button>
-            <button data-sample="${item.id}" class="btn-sample-item text-[11px] bg-slate-800/70 hover:bg-slate-700 text-slate-300 py-1 px-2 rounded-lg border border-slate-700 transition-colors" title="Pick transparent areas">
+            <button data-sample="${item.id}" title="Open Multi-Point Eyedropper to pick background areas to erase" class="btn-sample-item text-[11px] bg-slate-800/70 hover:bg-slate-700 text-slate-300 py-1 px-2 rounded-lg border border-slate-700 transition-colors">
               💧 Pick
             </button>
           </div>
@@ -680,14 +717,15 @@ const renderQueue = () => {
         ` : ''}
       </div>
 
-      <!-- Delete from queue -->
-      <button data-remove="${item.id}" title="Remove from queue" class="text-slate-500 hover:text-slate-300 p-1 rounded-lg transition-colors">
+      <!-- Remove Item from Queue -->
+      <button data-remove="${item.id}" title="Remove this file from the conversion queue" class="text-slate-500 hover:text-slate-300 p-1 rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
     </div>
   `).join('');
 };
 
+// Sequentially process all 'idle' items in the queue without blocking UI responsiveness
 const processQueue = async () => {
   if (isProcessing) return;
   isProcessing = true;
@@ -700,7 +738,7 @@ const processQueue = async () => {
       try {
         const prepared = await prepareImageSource(item.file);
         const { blob: convertedBlob, dimensions } = await convertImageBlob(prepared, currentSettings);
-        
+
         item.convertedBlob = convertedBlob;
         item.convertedSize = convertedBlob.size;
         item.dimensions = dimensions;
@@ -719,6 +757,7 @@ const processQueue = async () => {
   isProcessing = false;
 };
 
+// Enqueue dropped, selected, or pasted image files and kick off processing
 const addFilesToQueue = (files: FileList | File[]) => {
   Array.from(files).forEach((file, idx) => {
     const url = URL.createObjectURL(file);
@@ -743,7 +782,7 @@ const addFilesToQueue = (files: FileList | File[]) => {
   processQueue();
 };
 
-// Global Clipboard Paste Support (Ctrl+V)
+// Global Clipboard Paste Listener (Ctrl+V / Cmd+V screenshot ingestion)
 window.addEventListener('paste', (e: ClipboardEvent) => {
   const items = e.clipboardData?.items;
   if (!items) return;
@@ -761,7 +800,7 @@ window.addEventListener('paste', (e: ClipboardEvent) => {
   }
 });
 
-// Event Listeners
+// Control Panel Event Listeners
 document.querySelectorAll('.format-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
     const target = e.currentTarget as HTMLButtonElement;
@@ -769,7 +808,7 @@ document.querySelectorAll('.format-btn').forEach(btn => {
       b.className = 'format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center';
     });
     target.className = 'format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center';
-    
+
     currentSettings.targetFormat = target.dataset.format as OutputFormat;
     updateSettingsUI();
 
@@ -984,4 +1023,5 @@ btnBatchDownload.addEventListener('click', async () => {
   }
 });
 
+// Initialize sidebar state on initial load
 updateSettingsUI();

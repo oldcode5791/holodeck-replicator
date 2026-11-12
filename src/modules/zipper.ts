@@ -2,6 +2,10 @@ import JSZip from 'jszip';
 import type { ImageQueueItem, ConversionSettings } from './types';
 import { getExtensionForFormat } from './converter';
 
+/**
+ * Bundles all completed images in the conversion queue into a single DEFLATE-compressed
+ * ZIP archive inside browser memory for one-click batch download.
+ */
 export const packageBatchZip = async (
   items: ImageQueueItem[],
   settings: ConversionSettings

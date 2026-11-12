@@ -4,18 +4,25 @@ import { GifReader } from 'omggif';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import type { ConversionSettings } from './types';
 
+/**
+ * Single decoded animation or static raster frame paired with its frame delay.
+ */
 export interface DecodedFrame {
   canvas: HTMLCanvasElement;
-  delay: number; // centiseconds (1/100s) for GIF encoder
+  delay: number; // Frame duration in centiseconds (1/100s) for GIF timing
 }
 
+/**
+ * Normalized multi-frame or single-frame source ready for resizing, knockout, and encoding.
+ */
 export interface PreparedSource {
   frames: DecodedFrame[];
   isAnimated: boolean;
 }
 
 /**
- * Decodes all frames of a static or animated GIF with full disposal & transparency handling.
+ * Decodes all frames of a static or animated GIF using omggif, honoring GIF disposal
+ * methods (clear-to-transparent and restore-previous) so multi-frame transparency stays clean.
  */
 const decodeGifFrames = async (buffer: ArrayBuffer): Promise<PreparedSource> => {
   const bytes = new Uint8Array(buffer);
@@ -24,6 +31,7 @@ const decodeGifFrames = async (buffer: ArrayBuffer): Promise<PreparedSource> => 
   const height = reader.height;
   const numFrames = reader.numFrames();
 
+  // Cumulative composition canvas representing the visible GIF state across frames
   const compCanvas = document.createElement('canvas');
   compCanvas.width = width;
   compCanvas.height = height;
@@ -34,12 +42,14 @@ const decodeGifFrames = async (buffer: ArrayBuffer): Promise<PreparedSource> => 
 
   for (let i = 0; i < numFrames; i++) {
     const info = reader.frameInfo(i);
+    // Save canvas state prior to drawing if GIF disposal method 3 (Restore Previous) is requested
     const previousState = info.disposal === 3 ? compCtx.getImageData(0, 0, width, height) : null;
 
+    // Decode raw RGBA pixels for the current frame patch
     const frameImgData = compCtx.createImageData(width, height);
     reader.decodeAndBlitFrameRGBA(i, frameImgData.data);
 
-    // Composite non-transparent pixels of current frame onto cumulative canvas
+    // Draw decoded frame patch onto the cumulative composition canvas
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = width;
     tempCanvas.height = height;
@@ -47,7 +57,7 @@ const decodeGifFrames = async (buffer: ArrayBuffer): Promise<PreparedSource> => 
     tempCtx.putImageData(frameImgData, 0, 0);
     compCtx.drawImage(tempCanvas, 0, 0);
 
-    // Snapshot the composited frame
+    // Snapshot the composited frame into an independent canvas for downstream processing
     const snapCanvas = document.createElement('canvas');
     snapCanvas.width = width;
     snapCanvas.height = height;
@@ -58,7 +68,7 @@ const decodeGifFrames = async (buffer: ArrayBuffer): Promise<PreparedSource> => 
       delay: info.delay > 0 ? info.delay : 10,
     });
 
-    // Apply GIF frame disposal method
+    // Execute GIF frame disposal rules before advancing to the next frame
     if (info.disposal === 2) {
       compCtx.clearRect(info.x, info.y, info.width, info.height);
     } else if (info.disposal === 3 && previousState) {
@@ -70,7 +80,8 @@ const decodeGifFrames = async (buffer: ArrayBuffer): Promise<PreparedSource> => 
 };
 
 /**
- * Normalises any supported input file into one or more composited HTMLCanvasElements.
+ * Normalizes any supported input file (GIF, Apple HEIC/HEIF, TIFF, PNG, JPEG, WebP, or clipboard paste)
+ * into one or more composited HTMLCanvasElements entirely inside browser memory.
  */
 export const prepareImageSource = async (file: File): Promise<PreparedSource> => {
   const fileName = file.name.toLowerCase();
@@ -82,7 +93,7 @@ export const prepareImageSource = async (file: File): Promise<PreparedSource> =>
     return await decodeGifFrames(buffer);
   }
 
-  // 2. HEIC / HEIF
+  // 2. Apple HEIC / HEIF (decoded via heic2any WebAssembly/JS decoder)
   const isHeic =
     file.type === 'image/heic' ||
     file.type === 'image/heif' ||
@@ -100,7 +111,7 @@ export const prepareImageSource = async (file: File): Promise<PreparedSource> =>
     standardBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
   }
 
-  // 3. TIFF
+  // 3. Multi-page or uncompressed TIFF (decoded via UTIF)
   const isTiff =
     file.type === 'image/tiff' ||
     fileName.endsWith('.tiff') ||
@@ -130,7 +141,7 @@ export const prepareImageSource = async (file: File): Promise<PreparedSource> =>
     return { frames: [{ canvas, delay: 10 }], isAnimated: false };
   }
 
-  // 4. Standard Web Images (PNG, JPEG, WebP, Clipboard Paste)
+  // 4. Standard Browser-Native Formats (PNG, JPEG, WebP, Clipboard Bitmaps)
   const bitmap = await createImageBitmap(standardBlob);
   const canvas = document.createElement('canvas');
   canvas.width = bitmap.width;
@@ -142,6 +153,9 @@ export const prepareImageSource = async (file: File): Promise<PreparedSource> =>
   return { frames: [{ canvas, delay: 10 }], isAnimated: false };
 };
 
+/**
+ * Converts a 6-character CSS hex color string (e.g. '#ffffff') into an [R, G, B] tuple.
+ */
 const hexToRgb = (hex: string): [number, number, number] => {
   const clean = hex.replace('#', '');
   return [
@@ -151,6 +165,10 @@ const hexToRgb = (hex: string): [number, number, number] => {
   ];
 };
 
+/**
+ * Non-recursive stack-based 4-way flood fill ("Magic Wand") that erases contiguous pixels
+ * within Euclidean RGB distance `tolerance` starting from `(startX, startY)`.
+ */
 const floodFillErase = (
   data: Uint8ClampedArray,
   width: number,
@@ -179,8 +197,10 @@ const floodFillErase = (
     const idx = stack[--ptr];
     const p = idx * 4;
 
+    // Skip already transparent pixels
     if (data[p + 3] === 0) continue;
 
+    // Compute 3D Euclidean color distance in RGB space
     const dist = Math.sqrt(
       (data[p] - targetR) ** 2 +
       (data[p + 1] - targetG) ** 2 +
@@ -188,6 +208,7 @@ const floodFillErase = (
     );
 
     if (dist <= tolerance) {
+      // Set alpha channel to 0 (fully transparent) and enqueue cardinal neighbors
       data[p + 3] = 0;
 
       const x = idx % width;
@@ -201,6 +222,10 @@ const floodFillErase = (
   }
 };
 
+/**
+ * Erases all pixels across the entire image matching the target RGB color within `tolerance`,
+ * regardless of whether they are connected to the seed point.
+ */
 const globalColorErase = (
   data: Uint8ClampedArray,
   targetR: number,
@@ -222,7 +247,8 @@ const globalColorErase = (
 };
 
 /**
- * Erodes the outer alpha edge by `passes` pixels to eliminate white/black anti-aliasing halos.
+ * Erodes the outer opaque edge by `passes` 1-pixel morphological passes to remove
+ * residual white or black anti-aliasing fringe halos around cut-out subjects.
  */
 const applyAlphaDefringe = (
   data: Uint8ClampedArray,
@@ -231,6 +257,7 @@ const applyAlphaDefringe = (
   passes: number
 ) => {
   for (let pass = 0; pass < passes; pass++) {
+    // Snapshot current alpha channel so erosion evaluates simultaneously rather than cascading
     const alphaCopy = new Uint8ClampedArray(width * height);
     for (let i = 0; i < width * height; i++) {
       alphaCopy[i] = data[i * 4 + 3];
@@ -256,7 +283,8 @@ const applyAlphaDefringe = (
 };
 
 /**
- * Shared knockout & defringe pass used by both the batch encoder and live Eyedropper preview.
+ * Applies multi-point or fallback background knockout and optional edge defringing
+ * directly to a 2D Canvas context. Shared by both batch encoding and the live Eyedropper preview.
  */
 export const applyBackgroundKnockout = (
   ctx: CanvasRenderingContext2D,
@@ -266,9 +294,12 @@ export const applyBackgroundKnockout = (
 ) => {
   const imgData = ctx.getImageData(0, 0, width, height);
   const data = imgData.data;
+
+  // Map 1..60% UI tolerance onto Euclidean RGB distance (max RGB diagonal is ~441.67)
   const tolerance = settings.bgTolerance * 4.41;
 
   if (settings.samplePoints && settings.samplePoints.length > 0) {
+    // Execute knockout pass for every user-sampled Eyedropper coordinate
     for (const pt of settings.samplePoints) {
       const seedX = Math.min(width - 1, Math.max(0, Math.round(pt.x * width)));
       const seedY = Math.min(height - 1, Math.max(0, Math.round(pt.y * height)));
@@ -281,6 +312,7 @@ export const applyBackgroundKnockout = (
       }
     }
   } else {
+    // Fallback mode: sample top-left corner pixel (0,0) or use explicit preset hex color
     let targetR = data[0];
     let targetG = data[1];
     let targetB = data[2];
@@ -296,6 +328,7 @@ export const applyBackgroundKnockout = (
     }
   }
 
+  // Optional 1-3px edge halo erosion pass
   if (settings.bgDefringe > 0) {
     applyAlphaDefringe(data, width, height, settings.bgDefringe);
   }
@@ -303,6 +336,10 @@ export const applyBackgroundKnockout = (
   ctx.putImageData(imgData, 0, 0);
 };
 
+/**
+ * Resizes, applies matte/transparency rules, runs background knockout, and encodes
+ * a PreparedSource into the target output format (animated/static GIF, WebP, PNG, or JPEG).
+ */
 export const convertImageBlob = async (
   prepared: PreparedSource,
   settings: ConversionSettings
@@ -311,6 +348,7 @@ export const convertImageBlob = async (
   let width = firstFrame.width;
   let height = firstFrame.height;
 
+  // Enforce optional aspect-ratio-preserving bounding box limits
   if (settings.maxWidth && width > settings.maxWidth) {
     height = Math.round((height * settings.maxWidth) / width);
     width = settings.maxWidth;
@@ -320,6 +358,7 @@ export const convertImageBlob = async (
     height = settings.maxHeight;
   }
 
+  // Helper that renders and processes an individual source frame onto a target-sized canvas
   const renderProcessedFrame = (srcCanvas: HTMLCanvasElement): HTMLCanvasElement => {
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -346,7 +385,7 @@ export const convertImageBlob = async (
     return canvas;
   };
 
-  // Multi-frame or single-frame GIF export via gifenc
+  // Multi-frame or single-frame GIF export via gifenc palette quantization
   if (settings.targetFormat === 'image/gif') {
     const gif = GIFEncoder();
     const preserveAlpha = settings.preserveAlpha || settings.removeBackground;
@@ -358,6 +397,7 @@ export const convertImageBlob = async (
       const ctx = processedCanvas.getContext('2d')!;
       const { data } = ctx.getImageData(0, 0, width, height);
 
+      // Quantize RGBA frame down to a 256-color palette with 1-bit transparency support
       const palette = quantize(data, 256, {
         format,
         oneBitAlpha: true,
@@ -372,8 +412,8 @@ export const convertImageBlob = async (
 
       gif.writeFrame(index, width, height, {
         palette,
-        delay: frame.delay * 10, // gifenc expects milliseconds
-        dispose: 2, // Clear frame before next frame so transparent animated GIFs don't smear
+        delay: frame.delay * 10, // Convert centiseconds to milliseconds for gifenc
+        dispose: 2, // Clear frame before next frame so transparent animated GIFs do not ghost
         transparent: transparentIndex !== -1,
         transparentIndex: transparentIndex !== -1 ? transparentIndex : 0,
       });
@@ -384,7 +424,7 @@ export const convertImageBlob = async (
     return { blob: gifBlob, dimensions: { width, height } };
   }
 
-  // Single-frame WebP, PNG, or JPEG export
+  // Single-frame WebP, PNG, or JPEG export via native Canvas.toBlob
   const processedCanvas = renderProcessedFrame(firstFrame);
   return new Promise((resolve, reject) => {
     processedCanvas.toBlob(
@@ -401,6 +441,9 @@ export const convertImageBlob = async (
   });
 };
 
+/**
+ * Formats a byte count into a human-readable string (B, KB, MB, GB).
+ */
 export const formatBytes = (bytes: number, decimals = 2): string => {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -410,6 +453,9 @@ export const formatBytes = (bytes: number, decimals = 2): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
+/**
+ * Maps an OutputFormat MIME type to its canonical lowercase file extension.
+ */
 export const getExtensionForFormat = (format: ConversionSettings['targetFormat']): string => {
   switch (format) {
     case 'image/jpeg': return 'jpg';
