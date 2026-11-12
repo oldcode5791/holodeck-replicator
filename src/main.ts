@@ -14,6 +14,7 @@ const currentSettings: ConversionSettings = {
   removeBackground: true,
   bgTargetColor: 'auto',
   bgTolerance: 15,
+  bgContiguous: true,
 };
 
 let queue: ImageQueueItem[] = [];
@@ -30,7 +31,7 @@ app.innerHTML = `
         <div>
           <span class="text-base font-bold tracking-tight text-white flex items-center gap-2">
             Holodeck Replicator
-            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400">v1.2</span>
+            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400">v1.3</span>
           </span>
           <p class="text-xs text-slate-400 hidden sm:block">100% Client-Side Image Matrix & Format Transcoder</p>
         </div>
@@ -79,7 +80,7 @@ app.innerHTML = `
             <input type="range" id="quality-slider" min="10" max="100" value="85" step="5" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-2 rounded-lg" />
           </div>
 
-          <!-- Background Knockout (Chroma Key) -->
+          <!-- Background Knockout (Eyedropper & Chroma Key) -->
           <div class="space-y-3 pt-3 border-t border-slate-800">
             <div class="flex items-center justify-between">
               <div>
@@ -92,12 +93,24 @@ app.innerHTML = `
               <input type="checkbox" id="check-knockout" checked class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
             </div>
 
-            <div id="knockout-controls" class="space-y-2.5 pl-2 border-l-2 border-cyan-500/40">
+            <div id="knockout-controls" class="space-y-2.5 pl-2.5 border-l-2 border-cyan-500/40">
+              <!-- Eyedropper Button & Swatch -->
+              <div class="flex items-center justify-between gap-2">
+                <button type="button" id="btn-open-eyedropper" class="flex-1 bg-cyan-950/70 hover:bg-cyan-900/70 text-cyan-300 border border-cyan-500/40 rounded-lg py-1.5 px-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                  Eyedropper Sample
+                </button>
+                <div id="sampled-swatch" title="Active target colour" class="w-7 h-7 rounded-lg border border-slate-600 shrink-0 flex items-center justify-center text-[9px] font-mono text-slate-300 bg-slate-800">
+                  AUTO
+                </div>
+              </div>
+
+              <!-- Preset Dropdown -->
               <div class="flex items-center justify-between text-xs">
-                <span class="text-slate-400">Target Colour</span>
-                <div class="flex items-center gap-2">
+                <span class="text-slate-400">Colour Mode</span>
+                <div class="flex items-center gap-1.5">
                   <select id="select-bg-color" class="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-cyan-500">
-                    <option value="auto">Auto (Top-Left Pixel)</option>
+                    <option value="auto">Auto (Corner / Sample)</option>
                     <option value="#ffffff">Pure White (#FFF)</option>
                     <option value="#000000">Pure Black (#000)</option>
                     <option value="custom">Custom Hex</option>
@@ -106,6 +119,13 @@ app.innerHTML = `
                 </div>
               </div>
 
+              <!-- Contiguous Magic Wand Toggle -->
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-400">Contiguous (Magic Wand)</span>
+                <input type="checkbox" id="check-contiguous" checked class="w-3.5 h-3.5 accent-cyan-500 rounded cursor-pointer" />
+              </div>
+
+              <!-- Tolerance Slider -->
               <div class="space-y-1">
                 <div class="flex justify-between items-center text-xs">
                   <span class="text-slate-400">Tolerance</span>
@@ -187,6 +207,36 @@ app.innerHTML = `
       </main>
     </div>
 
+    <!-- Eyedropper Sampling Modal -->
+    <div id="eyedropper-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex-col items-center justify-center p-6">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full p-5 shadow-2xl flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <span class="text-cyan-400">💧</span> Eyedropper Background Sampler
+            </h3>
+            <p class="text-xs text-slate-400">Click anywhere on the background area you want to erase to transparency.</p>
+          </div>
+          <button id="btn-close-eyedropper" class="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div class="relative bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center max-h-[65vh] p-2">
+          <canvas id="eyedropper-canvas" class="max-w-full max-h-[60vh] object-contain cursor-crosshair shadow-lg"></canvas>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <div class="flex items-center gap-2">
+            <span>Hovered Pixel:</span>
+            <span id="hover-swatch" class="w-4 h-4 rounded border border-slate-600 inline-block bg-transparent"></span>
+            <span id="hover-hex" class="font-mono text-slate-200">—</span>
+          </div>
+          <span class="text-[11px] text-cyan-400">Click pixel to apply & re-process</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Developer Support Badge -->
     <div class="fixed bottom-4 right-4 z-40">
       <a 
@@ -214,8 +264,8 @@ const infoCopy: Record<string, string> = {
            <b class="text-purple-400">GIF:</b> 256-colour raster image with 1-bit transparent index.`,
   quality: `<strong class="text-white block mb-1">Quality Encoding</strong>
             Applies lossy compression to WebP and JPEG. Disabled for lossless PNG and palette-quantised GIF.`,
-  knockout: `<strong class="text-white block mb-1">Background Knockout</strong>
-             Scans pixel colors and wipes matching pixels to 100% transparency. Set to Auto to sample the top-left pixel, or choose pure white/black/custom with adjustable tolerance.`,
+  knockout: `<strong class="text-white block mb-1">Eyedropper & Background Knockout</strong>
+             Use <b>Eyedropper Sample</b> to click directly on the background you want removed. Enable <b>Contiguous</b> (Magic Wand) to erase only the connected background without touching matching colours inside your subject.`,
   alpha: `<strong class="text-white block mb-1">Alpha Channel Retention</strong>
           Preserves pre-existing transparent areas from input PNG/WebP/GIF files.`,
   matte: `<strong class="text-white block mb-1">Matte Background</strong>
@@ -295,6 +345,101 @@ const selectBgColor = document.getElementById('select-bg-color') as HTMLSelectEl
 const pickerBgColor = document.getElementById('picker-bg-color') as HTMLInputElement;
 const toleranceSlider = document.getElementById('tolerance-slider') as HTMLInputElement;
 const toleranceVal = document.getElementById('tolerance-val') as HTMLSpanElement;
+const checkContiguous = document.getElementById('check-contiguous') as HTMLInputElement;
+const btnOpenEyedropper = document.getElementById('btn-open-eyedropper') as HTMLButtonElement;
+const sampledSwatch = document.getElementById('sampled-swatch') as HTMLDivElement;
+
+// Eyedropper Modal Elements
+const eyedropperModal = document.getElementById('eyedropper-modal') as HTMLDivElement;
+const eyedropperCanvas = document.getElementById('eyedropper-canvas') as HTMLCanvasElement;
+const btnCloseEyedropper = document.getElementById('btn-close-eyedropper') as HTMLButtonElement;
+const hoverSwatch = document.getElementById('hover-swatch') as HTMLSpanElement;
+const hoverHex = document.getElementById('hover-hex') as HTMLSpanElement;
+
+const openEyedropperFor = async (item: ImageQueueItem) => {
+  const preparedBlob = await prepareImageSource(item.file);
+  const bitmap = await createImageBitmap(preparedBlob);
+
+  eyedropperCanvas.width = bitmap.width;
+  eyedropperCanvas.height = bitmap.height;
+  const ctx = eyedropperCanvas.getContext('2d');
+  if (ctx) {
+    ctx.drawImage(bitmap, 0, 0);
+  }
+
+  eyedropperModal.classList.remove('hidden');
+  eyedropperModal.classList.add('flex');
+};
+
+const closeEyedropper = () => {
+  eyedropperModal.classList.add('hidden');
+  eyedropperModal.classList.remove('flex');
+};
+
+const rgbToHex = (r: number, g: number, b: number) =>
+  '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
+
+eyedropperCanvas.addEventListener('mousemove', (e) => {
+  const rect = eyedropperCanvas.getBoundingClientRect();
+  const scaleX = eyedropperCanvas.width / rect.width;
+  const scaleY = eyedropperCanvas.height / rect.height;
+  const x = Math.min(eyedropperCanvas.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) * scaleX)));
+  const y = Math.min(eyedropperCanvas.height - 1, Math.max(0, Math.floor((e.clientY - rect.top) * scaleY)));
+
+  const ctx = eyedropperCanvas.getContext('2d');
+  if (!ctx) return;
+  const pixel = ctx.getImageData(x, y, 1, 1).data;
+  const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+  hoverSwatch.style.backgroundColor = hex;
+  hoverHex.textContent = hex.toUpperCase();
+});
+
+eyedropperCanvas.addEventListener('click', (e) => {
+  const rect = eyedropperCanvas.getBoundingClientRect();
+  const normX = (e.clientX - rect.left) / rect.width;
+  const normY = (e.clientY - rect.top) / rect.height;
+
+  const scaleX = eyedropperCanvas.width / rect.width;
+  const scaleY = eyedropperCanvas.height / rect.height;
+  const x = Math.min(eyedropperCanvas.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) * scaleX)));
+  const y = Math.min(eyedropperCanvas.height - 1, Math.max(0, Math.floor((e.clientY - rect.top) * scaleY)));
+
+  const ctx = eyedropperCanvas.getContext('2d');
+  if (!ctx) return;
+  const pixel = ctx.getImageData(x, y, 1, 1).data;
+  const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+
+  currentSettings.removeBackground = true;
+  checkKnockout.checked = true;
+  currentSettings.samplePoint = { x: normX, y: normY };
+  currentSettings.bgTargetColor = hex;
+
+  selectBgColor.value = 'custom';
+  pickerBgColor.value = hex;
+  pickerBgColor.classList.remove('hidden');
+  sampledSwatch.style.backgroundColor = hex;
+  sampledSwatch.textContent = '';
+
+  closeEyedropper();
+  updateSettingsUI();
+
+  queue.forEach((q) => (q.status = 'idle'));
+  renderQueue();
+  processQueue();
+});
+
+btnCloseEyedropper.addEventListener('click', closeEyedropper);
+eyedropperModal.addEventListener('click', (e) => {
+  if (e.target === eyedropperModal) closeEyedropper();
+});
+
+btnOpenEyedropper.addEventListener('click', () => {
+  if (queue.length === 0) {
+    fileInput.click();
+    return;
+  }
+  openEyedropperFor(queue[0]);
+});
 
 const updateSettingsUI = () => {
   const isLosslessOrPalette = currentSettings.targetFormat === 'image/png' || currentSettings.targetFormat === 'image/gif';
@@ -335,9 +480,12 @@ const renderQueue = () => {
 
   queueGrid.innerHTML = queue.map(item => `
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex gap-4 items-center relative overflow-hidden group">
-      <!-- Checkerboard preview box -->
-      <div class="w-20 h-20 rounded-xl overflow-hidden shrink-0 transparency-check border border-slate-700/60 flex items-center justify-center relative">
+      <!-- Checkerboard preview box with quick eyedropper trigger -->
+      <div class="w-20 h-20 rounded-xl overflow-hidden shrink-0 transparency-check border border-slate-700/60 flex items-center justify-center relative group/thumb">
         <img src="${item.previewUrl}" alt="Preview" class="w-full h-full object-contain select-none" />
+        <button data-sample="${item.id}" title="Sample background colour with Eyedropper" class="btn-sample-item absolute bottom-1 right-1 bg-slate-900/90 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-slate-700 rounded-md p-1 opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-md">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+        </button>
       </div>
 
       <!-- Details -->
@@ -363,10 +511,15 @@ const renderQueue = () => {
         ` : ''}
 
         ${item.status === 'completed' ? `
-          <button data-download="${item.id}" class="btn-single-download text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium py-1 px-3 rounded-lg border border-slate-700 hover:border-cyan-500/40 transition-all inline-flex items-center gap-1">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-            Save ${getExtensionForFormat(currentSettings.targetFormat).toUpperCase()}
-          </button>
+          <div class="flex items-center gap-2">
+            <button data-download="${item.id}" class="btn-single-download text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium py-1 px-3 rounded-lg border border-slate-700 hover:border-cyan-500/40 transition-all inline-flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              Save ${getExtensionForFormat(currentSettings.targetFormat).toUpperCase()}
+            </button>
+            <button data-sample="${item.id}" class="btn-sample-item text-[11px] bg-slate-800/70 hover:bg-slate-700 text-slate-300 py-1 px-2 rounded-lg border border-slate-700 transition-colors" title="Pick background colour">
+              💧 Pick
+            </button>
+          </div>
         ` : ''}
 
         ${item.status === 'error' ? `
@@ -400,7 +553,6 @@ const processQueue = async () => {
         item.convertedBlob = convertedBlob;
         item.convertedSize = convertedBlob.size;
         item.dimensions = dimensions;
-        // Update thumbnail to converted preview so the transparent knockout is visible in the UI
         item.previewUrl = URL.createObjectURL(convertedBlob);
         item.status = 'completed';
       } catch (err: any) {
@@ -418,14 +570,15 @@ const processQueue = async () => {
 
 const addFilesToQueue = (files: FileList | File[]) => {
   Array.from(files).forEach(file => {
-    const previewUrl = URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
     const item: ImageQueueItem = {
       id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       file,
       originalName: file.name,
       originalSize: file.size,
       originalType: file.type,
-      previewUrl,
+      originalUrl: url,
+      previewUrl: url,
       status: 'idle',
     };
     queue.push(item);
@@ -481,14 +634,31 @@ checkKnockout.addEventListener('change', (e) => {
   processQueue();
 });
 
+checkContiguous.addEventListener('change', (e) => {
+  currentSettings.bgContiguous = (e.target as HTMLInputElement).checked;
+  queue.forEach(q => q.status = 'idle');
+  renderQueue();
+  processQueue();
+});
+
 selectBgColor.addEventListener('change', () => {
   const val = selectBgColor.value;
+  currentSettings.samplePoint = undefined;
   if (val === 'custom') {
     pickerBgColor.classList.remove('hidden');
     currentSettings.bgTargetColor = pickerBgColor.value;
+    sampledSwatch.style.backgroundColor = pickerBgColor.value;
+    sampledSwatch.textContent = '';
   } else {
     pickerBgColor.classList.add('hidden');
     currentSettings.bgTargetColor = val;
+    if (val === 'auto') {
+      sampledSwatch.style.backgroundColor = '';
+      sampledSwatch.textContent = 'AUTO';
+    } else {
+      sampledSwatch.style.backgroundColor = val;
+      sampledSwatch.textContent = '';
+    }
   }
   queue.forEach(q => q.status = 'idle');
   renderQueue();
@@ -496,7 +666,10 @@ selectBgColor.addEventListener('change', () => {
 });
 
 pickerBgColor.addEventListener('input', () => {
+  currentSettings.samplePoint = undefined;
   currentSettings.bgTargetColor = pickerBgColor.value;
+  sampledSwatch.style.backgroundColor = pickerBgColor.value;
+  sampledSwatch.textContent = '';
   queue.forEach(q => q.status = 'idle');
   renderQueue();
   processQueue();
@@ -567,6 +740,14 @@ dropTarget.addEventListener('drop', (e) => {
 queueGrid.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
 
+  const sampleBtn = target.closest('.btn-sample-item') as HTMLElement;
+  if (sampleBtn) {
+    const id = sampleBtn.dataset.sample;
+    const item = queue.find(q => q.id === id);
+    if (item) openEyedropperFor(item);
+    return;
+  }
+
   const downloadBtn = target.closest('.btn-single-download') as HTMLElement;
   if (downloadBtn) {
     const id = downloadBtn.dataset.download;
@@ -588,6 +769,7 @@ queueGrid.addEventListener('click', (e) => {
     const idx = queue.findIndex(q => q.id === id);
     if (idx !== -1) {
       URL.revokeObjectURL(queue[idx].previewUrl);
+      URL.revokeObjectURL(queue[idx].originalUrl);
       queue.splice(idx, 1);
       renderQueue();
     }
@@ -595,7 +777,10 @@ queueGrid.addEventListener('click', (e) => {
 });
 
 btnClearQueue.addEventListener('click', () => {
-  queue.forEach(item => URL.revokeObjectURL(item.previewUrl));
+  queue.forEach(item => {
+    URL.revokeObjectURL(item.previewUrl);
+    URL.revokeObjectURL(item.originalUrl);
+  });
   queue = [];
   renderQueue();
 });
