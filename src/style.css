@@ -1,48 +1,26 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  body {
-    @apply bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500 selection:text-black;
-  }
-}
-
-/* Custom transparency canvas checkerboard */
-.transparency-check {
-  background-color: #0b0f17;
-  background-image: 
-    linear-gradient(45deg, #161e2e 25%, transparent 25%), 
-    linear-gradient(-45deg, #161e2e 25%, transparent 25%), 
-    linear-gradient(45deg, transparent 75%, #161e2e 75%), 
-    linear-gradient(-45deg, transparent 75%, #161e2e 75%);
-  background-size: 16px 16px;
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
-}
-
-/* Interactive Info Popout */
+/* Interactive Info Popout (Right-anchored to prevent sidebar blowout) */
 .info-badge {
   @apply relative inline-flex items-center justify-center;
 }
 
 .info-badge .info-content {
-  @apply invisible opacity-0 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 
-         bg-slate-900 border border-slate-700 rounded-xl text-[11px] font-normal leading-relaxed 
+  @apply invisible opacity-0 absolute bottom-full right-0 mb-2 w-64 p-3 
+         bg-slate-900 border border-slate-700/80 rounded-xl text-[11px] font-normal leading-relaxed 
          text-slate-300 shadow-2xl backdrop-blur pointer-events-none transition-all duration-150 z-50;
 }
 
+/* Triangle caret pointing directly to the 'i' button on the right */
 .info-badge .info-content::after {
   content: '';
   position: absolute;
   top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 6px;
   border-width: 5px;
   border-style: solid;
   border-color: #334155 transparent transparent transparent;
 }
 
-/* Show on hover or when toggled active */
+/* Show on hover or focus */
 .info-badge:hover .info-content,
 .info-badge:focus-within .info-content {
   @apply visible opacity-100 pointer-events-auto;
