@@ -17,8 +17,9 @@ export interface ConversionSettings {
   maxWidth?: number;
   maxHeight?: number;
   removeBackground: boolean;
-  bgTargetColor: string; // 'auto', or hex like '#ffffff'
-  bgTolerance: number; // 0 to 100
+  bgTargetColor: string;
+  bgTolerance: number; // 0 to 60
+  bgDefringe: number; // 0 to 3 pixels alpha erode
   bgContiguous: boolean;
   samplePoints: SamplePoint[];
 }

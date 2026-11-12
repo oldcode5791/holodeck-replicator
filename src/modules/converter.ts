@@ -4,37 +4,92 @@ import { GifReader } from 'omggif';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import type { ConversionSettings } from './types';
 
-const decodeGifToBlob = async (buffer: ArrayBuffer): Promise<Blob> => {
+export interface DecodedFrame {
+  canvas: HTMLCanvasElement;
+  delay: number; // centiseconds (1/100s) for GIF encoder
+}
+
+export interface PreparedSource {
+  frames: DecodedFrame[];
+  isAnimated: boolean;
+}
+
+/**
+ * Decodes all frames of a static or animated GIF with full disposal & transparency handling.
+ */
+const decodeGifFrames = async (buffer: ArrayBuffer): Promise<PreparedSource> => {
   const bytes = new Uint8Array(buffer);
   const reader = new GifReader(bytes);
   const width = reader.width;
   const height = reader.height;
+  const numFrames = reader.numFrames();
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d', { alpha: true });
-  if (!ctx) throw new Error('Could not initialise Canvas context for GIF parsing.');
+  const compCanvas = document.createElement('canvas');
+  compCanvas.width = width;
+  compCanvas.height = height;
+  const compCtx = compCanvas.getContext('2d', { alpha: true });
+  if (!compCtx) throw new Error('Could not initialise Canvas context for GIF parsing.');
 
-  const imgData = ctx.createImageData(width, height);
-  reader.decodeAndBlitFrameRGBA(0, imgData.data);
-  ctx.putImageData(imgData, 0, 0);
+  const frames: DecodedFrame[] = [];
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error('Failed to encode rasterised GIF frame.'));
-    }, 'image/png');
-  });
+  for (let i = 0; i < numFrames; i++) {
+    const info = reader.frameInfo(i);
+    const previousState = info.disposal === 3 ? compCtx.getImageData(0, 0, width, height) : null;
+
+    const frameImgData = compCtx.createImageData(width, height);
+    reader.decodeAndBlitFrameRGBA(i, frameImgData.data);
+
+    // Composite non-transparent pixels of current frame onto cumulative canvas
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d')!;
+    tempCtx.putImageData(frameImgData, 0, 0);
+    compCtx.drawImage(tempCanvas, 0, 0);
+
+    // Snapshot the composited frame
+    const snapCanvas = document.createElement('canvas');
+    snapCanvas.width = width;
+    snapCanvas.height = height;
+    snapCanvas.getContext('2d')!.drawImage(compCanvas, 0, 0);
+
+    frames.push({
+      canvas: snapCanvas,
+      delay: info.delay > 0 ? info.delay : 10,
+    });
+
+    // Apply GIF frame disposal method
+    if (info.disposal === 2) {
+      compCtx.clearRect(info.x, info.y, info.width, info.height);
+    } else if (info.disposal === 3 && previousState) {
+      compCtx.putImageData(previousState, 0, 0);
+    }
+  }
+
+  return { frames, isAnimated: numFrames > 1 };
 };
 
-export const prepareImageSource = async (file: File): Promise<Blob> => {
+/**
+ * Normalises any supported input file into one or more composited HTMLCanvasElements.
+ */
+export const prepareImageSource = async (file: File): Promise<PreparedSource> => {
   const fileName = file.name.toLowerCase();
 
-  const isHeic = file.type === 'image/heic' || 
-                 file.type === 'image/heif' || 
-                 fileName.endsWith('.heic') || 
-                 fileName.endsWith('.heif');
+  // 1. GIF (Static or Animated)
+  const isGif = file.type === 'image/gif' || fileName.endsWith('.gif');
+  if (isGif) {
+    const buffer = await file.arrayBuffer();
+    return await decodeGifFrames(buffer);
+  }
+
+  // 2. HEIC / HEIF
+  const isHeic =
+    file.type === 'image/heic' ||
+    file.type === 'image/heif' ||
+    fileName.endsWith('.heic') ||
+    fileName.endsWith('.heif');
+
+  let standardBlob: Blob = file;
 
   if (isHeic) {
     const conversionResult = await heic2any({
@@ -42,12 +97,14 @@ export const prepareImageSource = async (file: File): Promise<Blob> => {
       toType: 'image/png',
       quality: 1,
     });
-    return Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+    standardBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
   }
 
-  const isTiff = file.type === 'image/tiff' || 
-                 fileName.endsWith('.tiff') || 
-                 fileName.endsWith('.tif');
+  // 3. TIFF
+  const isTiff =
+    file.type === 'image/tiff' ||
+    fileName.endsWith('.tiff') ||
+    fileName.endsWith('.tif');
 
   if (isTiff) {
     const buffer = await file.arrayBuffer();
@@ -70,21 +127,19 @@ export const prepareImageSource = async (file: File): Promise<Blob> => {
     imgData.data.set(rgba);
     ctx.putImageData(imgData, 0, 0);
 
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error('Failed to encode rasterised TIFF to PNG blob.'));
-      }, 'image/png');
-    });
+    return { frames: [{ canvas, delay: 10 }], isAnimated: false };
   }
 
-  const isGif = file.type === 'image/gif' || fileName.endsWith('.gif');
-  if (isGif) {
-    const buffer = await file.arrayBuffer();
-    return await decodeGifToBlob(buffer);
-  }
+  // 4. Standard Web Images (PNG, JPEG, WebP, Clipboard Paste)
+  const bitmap = await createImageBitmap(standardBlob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d', { alpha: true });
+  if (!ctx) throw new Error('Could not initialise Canvas 2D context.');
+  ctx.drawImage(bitmap, 0, 0);
 
-  return file;
+  return { frames: [{ canvas, delay: 10 }], isAnimated: false };
 };
 
 const hexToRgb = (hex: string): [number, number, number] => {
@@ -124,7 +179,7 @@ const floodFillErase = (
     const idx = stack[--ptr];
     const p = idx * 4;
 
-    if (data[p + 3] === 0) continue; // Already transparent
+    if (data[p + 3] === 0) continue;
 
     const dist = Math.sqrt(
       (data[p] - targetR) ** 2 +
@@ -167,7 +222,41 @@ const globalColorErase = (
 };
 
 /**
- * Shared knockout pass used by both the batch encoder and the live Eyedropper preview
+ * Erodes the outer alpha edge by `passes` pixels to eliminate white/black anti-aliasing halos.
+ */
+const applyAlphaDefringe = (
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  passes: number
+) => {
+  for (let pass = 0; pass < passes; pass++) {
+    const alphaCopy = new Uint8ClampedArray(width * height);
+    for (let i = 0; i < width * height; i++) {
+      alphaCopy[i] = data[i * 4 + 3];
+    }
+
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        if (alphaCopy[idx] === 0) continue;
+
+        const hasTransparentNeighbour =
+          alphaCopy[idx - 1] === 0 ||
+          alphaCopy[idx + 1] === 0 ||
+          alphaCopy[idx - width] === 0 ||
+          alphaCopy[idx + width] === 0;
+
+        if (hasTransparentNeighbour) {
+          data[idx * 4 + 3] = 0;
+        }
+      }
+    }
+  }
+};
+
+/**
+ * Shared knockout & defringe pass used by both the batch encoder and live Eyedropper preview.
  */
 export const applyBackgroundKnockout = (
   ctx: CanvasRenderingContext2D,
@@ -179,7 +268,6 @@ export const applyBackgroundKnockout = (
   const data = imgData.data;
   const tolerance = settings.bgTolerance * 4.41;
 
-  // If user clicked one or more points with the eyedropper, process every point
   if (settings.samplePoints && settings.samplePoints.length > 0) {
     for (const pt of settings.samplePoints) {
       const seedX = Math.min(width - 1, Math.max(0, Math.round(pt.x * width)));
@@ -193,7 +281,6 @@ export const applyBackgroundKnockout = (
       }
     }
   } else {
-    // Fallback to single auto/preset colour from (0,0)
     let targetR = data[0];
     let targetG = data[1];
     let targetB = data[2];
@@ -209,15 +296,20 @@ export const applyBackgroundKnockout = (
     }
   }
 
+  if (settings.bgDefringe > 0) {
+    applyAlphaDefringe(data, width, height, settings.bgDefringe);
+  }
+
   ctx.putImageData(imgData, 0, 0);
 };
 
 export const convertImageBlob = async (
-  sourceBlob: Blob,
+  prepared: PreparedSource,
   settings: ConversionSettings
 ): Promise<{ blob: Blob; dimensions: { width: number; height: number } }> => {
-  const imageBitmap = await createImageBitmap(sourceBlob);
-  let { width, height } = imageBitmap;
+  const firstFrame = prepared.frames[0].canvas;
+  let width = firstFrame.width;
+  let height = firstFrame.height;
 
   if (settings.maxWidth && width > settings.maxWidth) {
     height = Math.round((height * settings.maxWidth) / width);
@@ -228,63 +320,74 @@ export const convertImageBlob = async (
     height = settings.maxHeight;
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d', { alpha: true });
+  const renderProcessedFrame = (srcCanvas: HTMLCanvasElement): HTMLCanvasElement => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) throw new Error('Could not initialise Canvas 2D rendering context');
 
-  if (!ctx) {
-    throw new Error('Could not initialise Canvas 2D rendering context');
-  }
-
-  const isTargetJpeg = settings.targetFormat === 'image/jpeg';
-  if ((isTargetJpeg || !settings.preserveAlpha) && !settings.removeBackground) {
-    ctx.fillStyle = settings.matteColor === 'transparent' ? '#ffffff' : settings.matteColor;
-    ctx.fillRect(0, 0, width, height);
-  } else {
-    ctx.clearRect(0, 0, width, height);
-  }
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(imageBitmap, 0, 0, width, height);
-
-  if (settings.removeBackground) {
-    applyBackgroundKnockout(ctx, width, height, settings);
-  }
-
-  if (settings.targetFormat === 'image/gif') {
-    const imgData = ctx.getImageData(0, 0, width, height);
-    const data = imgData.data;
-
-    const preserveAlpha = settings.preserveAlpha || settings.removeBackground;
-    const format = preserveAlpha ? 'rgba4444' : 'rgb565';
-    const palette = quantize(data, 256, {
-      format,
-      oneBitAlpha: true,
-    });
-
-    const index = applyPalette(data, palette, format);
-
-    let transparentIndex = -1;
-    if (preserveAlpha) {
-      transparentIndex = palette.findIndex((rgba: number[]) => rgba[3] === 0);
+    const isTargetJpeg = settings.targetFormat === 'image/jpeg';
+    if ((isTargetJpeg || !settings.preserveAlpha) && !settings.removeBackground) {
+      ctx.fillStyle = settings.matteColor === 'transparent' ? '#ffffff' : settings.matteColor;
+      ctx.fillRect(0, 0, width, height);
+    } else {
+      ctx.clearRect(0, 0, width, height);
     }
 
-    const gif = GIFEncoder();
-    gif.writeFrame(index, width, height, {
-      palette,
-      transparent: transparentIndex !== -1,
-      transparentIndex: transparentIndex !== -1 ? transparentIndex : 0,
-    });
-    gif.finish();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(srcCanvas, 0, 0, width, height);
 
+    if (settings.removeBackground) {
+      applyBackgroundKnockout(ctx, width, height, settings);
+    }
+
+    return canvas;
+  };
+
+  // Multi-frame or single-frame GIF export via gifenc
+  if (settings.targetFormat === 'image/gif') {
+    const gif = GIFEncoder();
+    const preserveAlpha = settings.preserveAlpha || settings.removeBackground;
+    const format = preserveAlpha ? 'rgba4444' : 'rgb565';
+
+    for (let i = 0; i < prepared.frames.length; i++) {
+      const frame = prepared.frames[i];
+      const processedCanvas = renderProcessedFrame(frame.canvas);
+      const ctx = processedCanvas.getContext('2d')!;
+      const { data } = ctx.getImageData(0, 0, width, height);
+
+      const palette = quantize(data, 256, {
+        format,
+        oneBitAlpha: true,
+      });
+
+      const index = applyPalette(data, palette, format);
+
+      let transparentIndex = -1;
+      if (preserveAlpha) {
+        transparentIndex = palette.findIndex((rgba: number[]) => rgba[3] === 0);
+      }
+
+      gif.writeFrame(index, width, height, {
+        palette,
+        delay: frame.delay * 10, // gifenc expects milliseconds
+        dispose: 2, // Clear frame before next frame so transparent animated GIFs don't smear
+        transparent: transparentIndex !== -1,
+        transparentIndex: transparentIndex !== -1 ? transparentIndex : 0,
+      });
+    }
+
+    gif.finish();
     const gifBlob = new Blob([gif.bytes()], { type: 'image/gif' });
     return { blob: gifBlob, dimensions: { width, height } };
   }
 
+  // Single-frame WebP, PNG, or JPEG export
+  const processedCanvas = renderProcessedFrame(firstFrame);
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
+    processedCanvas.toBlob(
       (resultBlob) => {
         if (!resultBlob) {
           reject(new Error('Failed to encode image from canvas'));

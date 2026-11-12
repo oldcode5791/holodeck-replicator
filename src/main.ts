@@ -14,13 +14,14 @@ const currentSettings: ConversionSettings = {
   removeBackground: true,
   bgTargetColor: 'auto',
   bgTolerance: 15,
+  bgDefringe: 0,
   bgContiguous: true,
   samplePoints: [],
 };
 
 let queue: ImageQueueItem[] = [];
 let isProcessing = false;
-let sourceBitmapForEyedropper: ImageBitmap | null = null;
+let sourceCanvasForEyedropper: HTMLCanvasElement | null = null;
 
 app.innerHTML = `
   <div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
@@ -33,7 +34,7 @@ app.innerHTML = `
         <div>
           <span class="text-base font-bold tracking-tight text-white flex items-center gap-2">
             Holodeck Replicator
-            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400">v1.4</span>
+            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400">v1.5</span>
           </span>
           <p class="text-xs text-slate-400 hidden sm:block">100% Client-Side Image Matrix & Format Transcoder</p>
         </div>
@@ -82,7 +83,7 @@ app.innerHTML = `
             <input type="range" id="quality-slider" min="10" max="100" value="85" step="5" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-2 rounded-lg" />
           </div>
 
-          <!-- Background Knockout (Multi-Point Eyedropper & Chroma Key) -->
+          <!-- Background Knockout (Multi-Point Eyedropper & Edge Defringe) -->
           <div class="space-y-3 pt-3 border-t border-slate-800">
             <div class="flex items-center justify-between">
               <div>
@@ -134,6 +135,15 @@ app.innerHTML = `
                   <span id="tolerance-val" class="font-mono text-cyan-400 text-[11px]">15%</span>
                 </div>
                 <input type="range" id="tolerance-slider" min="1" max="60" value="15" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+              </div>
+
+              <!-- Edge Defringe Slider -->
+              <div class="space-y-1">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="text-slate-400">Edge Defringe (Halo)</span>
+                  <span id="defringe-val" class="font-mono text-cyan-400 text-[11px]">0 px</span>
+                </div>
+                <input type="range" id="defringe-slider" min="0" max="3" value="0" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
               </div>
             </div>
           </div>
@@ -191,13 +201,13 @@ app.innerHTML = `
 
       <!-- Main Stage / File Matrix Queue -->
       <main class="flex-1 p-6 overflow-y-auto flex flex-col items-center justify-start relative">
-        <!-- Drag & Drop Zone -->
+        <!-- Drag & Drop / Paste Zone -->
         <div id="drop-target" class="w-full max-w-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 rounded-3xl p-8 text-center transition-all bg-slate-900/50 flex flex-col items-center justify-center cursor-pointer mb-6">
           <div class="w-14 h-14 rounded-2xl bg-cyan-600/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-3 pointer-events-none">
             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
           </div>
-          <h3 class="text-base font-semibold text-white mb-1 pointer-events-none">Drag & Drop Image Manifest</h3>
-          <p class="text-xs text-slate-400 max-w-sm mb-4 pointer-events-none">Drop JPG, PNG, WebP, GIF, Apple HEIC, or TIFF files here for immediate client-side matrix conversion.</p>
+          <h3 class="text-base font-semibold text-white mb-1 pointer-events-none">Drag & Drop or Paste (<kbd class="text-xs font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-cyan-300">Ctrl+V</kbd>)</h3>
+          <p class="text-xs text-slate-400 max-w-sm mb-4 pointer-events-none">Drop or paste JPG, PNG, WebP, animated GIF, Apple HEIC, or TIFF files for immediate client-side conversion.</p>
           <label class="cursor-pointer bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs py-2 px-5 rounded-xl shadow-lg shadow-cyan-600/20 transition-all pointer-events-auto">
             Choose Files
             <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,image/tiff,.heic,.heif,.gif,.tif,.tiff" class="hidden" />
@@ -209,7 +219,7 @@ app.innerHTML = `
       </main>
     </div>
 
-    <!-- Interactive Multi-Point Eyedropper Modal -->
+    <!-- Interactive Multi-Point Eyedropper Modal with Live Tuning -->
     <div id="eyedropper-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex-col items-center justify-center p-4 sm:p-6">
       <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full p-5 shadow-2xl flex flex-col gap-4">
         <div class="flex items-center justify-between">
@@ -218,7 +228,7 @@ app.innerHTML = `
               <span class="text-cyan-400">💧</span> Multi-Point Eyedropper
               <span id="modal-points-count" class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300">0 areas selected</span>
             </h3>
-            <p class="text-xs text-slate-400">Click multiple areas (e.g. outer backdrop + inside letter loops) to preview transparency live.</p>
+            <p class="text-xs text-slate-400">Click multiple background pockets and fine-tune tolerance or edge defringe live.</p>
           </div>
           <button id="btn-close-eyedropper" class="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -226,8 +236,27 @@ app.innerHTML = `
         </div>
 
         <!-- Live Checkerboard Preview Stage -->
-        <div class="relative transparency-check border border-slate-700 rounded-xl overflow-hidden flex items-center justify-center max-h-[60vh] p-3">
-          <canvas id="eyedropper-canvas" class="max-w-full max-h-[55vh] object-contain cursor-crosshair shadow-xl"></canvas>
+        <div class="relative transparency-check border border-slate-700 rounded-xl overflow-hidden flex items-center justify-center max-h-[55vh] p-3">
+          <canvas id="eyedropper-canvas" class="max-w-full max-h-[50vh] object-contain cursor-crosshair shadow-xl"></canvas>
+        </div>
+
+        <!-- Live Modal Tuning Bar -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/70 border border-slate-800 rounded-xl p-3 text-xs">
+          <div class="space-y-1">
+            <div class="flex justify-between">
+              <span class="text-slate-400 font-medium">Live Tolerance</span>
+              <span id="modal-tolerance-val" class="font-mono text-cyan-400">15%</span>
+            </div>
+            <input type="range" id="modal-tolerance-slider" min="1" max="60" value="15" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+          </div>
+
+          <div class="space-y-1">
+            <div class="flex justify-between">
+              <span class="text-slate-400 font-medium">Edge Defringe (Remove Halo)</span>
+              <span id="modal-defringe-val" class="font-mono text-cyan-400">0 px</span>
+            </div>
+            <input type="range" id="modal-defringe-slider" min="0" max="3" value="0" step="1" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-1.5 rounded-lg" />
+          </div>
         </div>
 
         <!-- Bottom Action Bar -->
@@ -277,11 +306,11 @@ const infoCopy: Record<string, string> = {
            <b class="text-cyan-400">WebP:</b> Modern web compression with 8-bit alpha.<br/>
            <b class="text-amber-400">JPEG:</b> Standard universal format (no transparency).<br/>
            <b class="text-emerald-400">PNG:</b> Lossless image fidelity with full alpha channel.<br/>
-           <b class="text-purple-400">GIF:</b> 256-colour raster image with 1-bit transparent index.`,
+           <b class="text-purple-400">GIF:</b> Static or animated 256-colour raster with 1-bit transparency.`,
   quality: `<strong class="text-white block mb-1">Quality Encoding</strong>
             Applies lossy compression to WebP and JPEG. Disabled for lossless PNG and palette-quantised GIF.`,
-  knockout: `<strong class="text-white block mb-1">Multi-Point Eyedropper</strong>
-             Open the Eyedropper and click as many areas as you need (e.g. outer background + enclosed letter loops). Live checkerboard preview shows transparent areas immediately.`,
+  knockout: `<strong class="text-white block mb-1">Multi-Point Eyedropper & Defringe</strong>
+             Click multiple areas to erase enclosed loops. Use <b>Edge Defringe</b> (1–3 px) to shave off lingering white/black anti-aliasing fringes around edges.`,
   alpha: `<strong class="text-white block mb-1">Alpha Channel Retention</strong>
           Preserves pre-existing transparent areas from input PNG/WebP/GIF files.`,
   matte: `<strong class="text-white block mb-1">Matte Background</strong>
@@ -361,6 +390,8 @@ const selectBgColor = document.getElementById('select-bg-color') as HTMLSelectEl
 const pickerBgColor = document.getElementById('picker-bg-color') as HTMLInputElement;
 const toleranceSlider = document.getElementById('tolerance-slider') as HTMLInputElement;
 const toleranceVal = document.getElementById('tolerance-val') as HTMLSpanElement;
+const defringeSlider = document.getElementById('defringe-slider') as HTMLInputElement;
+const defringeVal = document.getElementById('defringe-val') as HTMLSpanElement;
 const checkContiguous = document.getElementById('check-contiguous') as HTMLInputElement;
 const btnOpenEyedropper = document.getElementById('btn-open-eyedropper') as HTMLButtonElement;
 const sampleCountBadge = document.getElementById('sample-count-badge') as HTMLSpanElement;
@@ -374,8 +405,28 @@ const btnUndoPoint = document.getElementById('btn-undo-point') as HTMLButtonElem
 const btnClearPoints = document.getElementById('btn-clear-points') as HTMLButtonElement;
 const btnApplyEyedropper = document.getElementById('btn-apply-eyedropper') as HTMLButtonElement;
 const modalPointsCount = document.getElementById('modal-points-count') as HTMLSpanElement;
+const modalToleranceSlider = document.getElementById('modal-tolerance-slider') as HTMLInputElement;
+const modalToleranceVal = document.getElementById('modal-tolerance-val') as HTMLSpanElement;
+const modalDefringeSlider = document.getElementById('modal-defringe-slider') as HTMLInputElement;
+const modalDefringeVal = document.getElementById('modal-defringe-val') as HTMLSpanElement;
 const hoverSwatch = document.getElementById('hover-swatch') as HTMLSpanElement;
 const hoverHex = document.getElementById('hover-hex') as HTMLSpanElement;
+
+const syncToleranceUI = (val: number) => {
+  currentSettings.bgTolerance = val;
+  toleranceSlider.value = String(val);
+  toleranceVal.textContent = `${val}%`;
+  modalToleranceSlider.value = String(val);
+  modalToleranceVal.textContent = `${val}%`;
+};
+
+const syncDefringeUI = (val: number) => {
+  currentSettings.bgDefringe = val;
+  defringeSlider.value = String(val);
+  defringeVal.textContent = `${val} px`;
+  modalDefringeSlider.value = String(val);
+  modalDefringeVal.textContent = `${val} px`;
+};
 
 const updateSampleCounters = () => {
   const count = currentSettings.samplePoints.length;
@@ -389,23 +440,22 @@ const updateSampleCounters = () => {
 };
 
 const renderEyedropperPreview = () => {
-  if (!sourceBitmapForEyedropper) return;
+  if (!sourceCanvasForEyedropper) return;
   const ctx = eyedropperCanvas.getContext('2d', { alpha: true });
   if (!ctx) return;
 
-  const w = sourceBitmapForEyedropper.width;
-  const h = sourceBitmapForEyedropper.height;
+  const w = sourceCanvasForEyedropper.width;
+  const h = sourceCanvasForEyedropper.height;
   eyedropperCanvas.width = w;
   eyedropperCanvas.height = h;
 
   ctx.clearRect(0, 0, w, h);
-  ctx.drawImage(sourceBitmapForEyedropper, 0, 0);
+  ctx.drawImage(sourceCanvasForEyedropper, 0, 0);
 
   if (currentSettings.samplePoints.length > 0) {
     applyBackgroundKnockout(ctx, w, h, currentSettings);
   }
 
-  // Draw small crosshair markers where user clicked
   currentSettings.samplePoints.forEach((pt, idx) => {
     const px = pt.x * w;
     const py = pt.y * h;
@@ -428,10 +478,13 @@ const renderEyedropperPreview = () => {
 };
 
 const openEyedropperFor = async (item: ImageQueueItem) => {
-  const preparedBlob = await prepareImageSource(item.file);
-  sourceBitmapForEyedropper = await createImageBitmap(preparedBlob);
+  const prepared = await prepareImageSource(item.file);
+  sourceCanvasForEyedropper = prepared.frames[0].canvas;
 
+  syncToleranceUI(currentSettings.bgTolerance);
+  syncDefringeUI(currentSettings.bgDefringe);
   renderEyedropperPreview();
+
   eyedropperModal.classList.remove('hidden');
   eyedropperModal.classList.add('flex');
 };
@@ -439,28 +492,23 @@ const openEyedropperFor = async (item: ImageQueueItem) => {
 const closeEyedropper = () => {
   eyedropperModal.classList.add('hidden');
   eyedropperModal.classList.remove('flex');
-  sourceBitmapForEyedropper = null;
+  sourceCanvasForEyedropper = null;
 };
 
 const rgbToHex = (r: number, g: number, b: number) =>
   '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 eyedropperCanvas.addEventListener('mousemove', (e) => {
-  if (!sourceBitmapForEyedropper) return;
+  if (!sourceCanvasForEyedropper) return;
   const rect = eyedropperCanvas.getBoundingClientRect();
   const scaleX = eyedropperCanvas.width / rect.width;
   const scaleY = eyedropperCanvas.height / rect.height;
   const x = Math.min(eyedropperCanvas.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) * scaleX)));
   const y = Math.min(eyedropperCanvas.height - 1, Math.max(0, Math.floor((e.clientY - rect.top) * scaleY)));
 
-  // Read colour from unmodified source bitmap so already-erased pixels still report true colour
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = 1;
-  tempCanvas.height = 1;
-  const tCtx = tempCanvas.getContext('2d');
-  if (!tCtx) return;
-  tCtx.drawImage(sourceBitmapForEyedropper, x, y, 1, 1, 0, 0, 1, 1);
-  const pixel = tCtx.getImageData(0, 0, 1, 1).data;
+  const srcCtx = sourceCanvasForEyedropper.getContext('2d');
+  if (!srcCtx) return;
+  const pixel = srcCtx.getImageData(x, y, 1, 1).data;
 
   const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
   hoverSwatch.style.backgroundColor = hex;
@@ -468,7 +516,7 @@ eyedropperCanvas.addEventListener('mousemove', (e) => {
 });
 
 eyedropperCanvas.addEventListener('click', (e) => {
-  if (!sourceBitmapForEyedropper) return;
+  if (!sourceCanvasForEyedropper) return;
   const rect = eyedropperCanvas.getBoundingClientRect();
   const normX = (e.clientX - rect.left) / rect.width;
   const normY = (e.clientY - rect.top) / rect.height;
@@ -478,19 +526,27 @@ eyedropperCanvas.addEventListener('click', (e) => {
   const x = Math.min(eyedropperCanvas.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) * scaleX)));
   const y = Math.min(eyedropperCanvas.height - 1, Math.max(0, Math.floor((e.clientY - rect.top) * scaleY)));
 
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = 1;
-  tempCanvas.height = 1;
-  const tCtx = tempCanvas.getContext('2d');
-  if (!tCtx) return;
-  tCtx.drawImage(sourceBitmapForEyedropper, x, y, 1, 1, 0, 0, 1, 1);
-  const pixel = tCtx.getImageData(0, 0, 1, 1).data;
+  const srcCtx = sourceCanvasForEyedropper.getContext('2d');
+  if (!srcCtx) return;
+  const pixel = srcCtx.getImageData(x, y, 1, 1).data;
   const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
 
   currentSettings.removeBackground = true;
   checkKnockout.checked = true;
   currentSettings.samplePoints.push({ x: normX, y: normY, color: hex });
 
+  renderEyedropperPreview();
+});
+
+modalToleranceSlider.addEventListener('input', (e) => {
+  const val = parseInt((e.target as HTMLInputElement).value, 10);
+  syncToleranceUI(val);
+  renderEyedropperPreview();
+});
+
+modalDefringeSlider.addEventListener('input', (e) => {
+  const val = parseInt((e.target as HTMLInputElement).value, 10);
+  syncDefringeUI(val);
   renderEyedropperPreview();
 });
 
@@ -504,30 +560,18 @@ btnClearPoints.addEventListener('click', () => {
   renderEyedropperPreview();
 });
 
-btnApplyEyedropper.addEventListener('click', () => {
+const applyModalAndReprocess = () => {
   closeEyedropper();
   updateSettingsUI();
   queue.forEach((q) => (q.status = 'idle'));
   renderQueue();
   processQueue();
-});
+};
 
-btnCloseEyedropper.addEventListener('click', () => {
-  closeEyedropper();
-  updateSettingsUI();
-  queue.forEach((q) => (q.status = 'idle'));
-  renderQueue();
-  processQueue();
-});
-
+btnApplyEyedropper.addEventListener('click', applyModalAndReprocess);
+btnCloseEyedropper.addEventListener('click', applyModalAndReprocess);
 eyedropperModal.addEventListener('click', (e) => {
-  if (e.target === eyedropperModal) {
-    closeEyedropper();
-    updateSettingsUI();
-    queue.forEach((q) => (q.status = 'idle'));
-    renderQueue();
-    processQueue();
-  }
+  if (e.target === eyedropperModal) applyModalAndReprocess();
 });
 
 btnOpenEyedropper.addEventListener('click', () => {
@@ -654,8 +698,8 @@ const processQueue = async () => {
       renderQueue();
 
       try {
-        const preparedBlob = await prepareImageSource(item.file);
-        const { blob: convertedBlob, dimensions } = await convertImageBlob(preparedBlob, currentSettings);
+        const prepared = await prepareImageSource(item.file);
+        const { blob: convertedBlob, dimensions } = await convertImageBlob(prepared, currentSettings);
         
         item.convertedBlob = convertedBlob;
         item.convertedSize = convertedBlob.size;
@@ -676,12 +720,16 @@ const processQueue = async () => {
 };
 
 const addFilesToQueue = (files: FileList | File[]) => {
-  Array.from(files).forEach(file => {
+  Array.from(files).forEach((file, idx) => {
     const url = URL.createObjectURL(file);
+    const fallbackName = file.name && file.name !== 'image.png'
+      ? file.name
+      : `pasted_capture_${Date.now()}_${idx + 1}.png`;
+
     const item: ImageQueueItem = {
       id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       file,
-      originalName: file.name,
+      originalName: fallbackName,
       originalSize: file.size,
       originalType: file.type,
       originalUrl: url,
@@ -694,6 +742,24 @@ const addFilesToQueue = (files: FileList | File[]) => {
   renderQueue();
   processQueue();
 };
+
+// Global Clipboard Paste Support (Ctrl+V)
+window.addEventListener('paste', (e: ClipboardEvent) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  const pastedFiles: File[] = [];
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.startsWith('image/')) {
+      const file = items[i].getAsFile();
+      if (file) pastedFiles.push(file);
+    }
+  }
+
+  if (pastedFiles.length > 0) {
+    addFilesToQueue(pastedFiles);
+  }
+});
 
 // Event Listeners
 document.querySelectorAll('.format-btn').forEach(btn => {
@@ -775,11 +841,21 @@ pickerBgColor.addEventListener('input', () => {
 
 toleranceSlider.addEventListener('input', (e) => {
   const val = parseInt((e.target as HTMLInputElement).value, 10);
-  toleranceVal.textContent = `${val}%`;
-  currentSettings.bgTolerance = val;
+  syncToleranceUI(val);
 });
 
 toleranceSlider.addEventListener('change', () => {
+  queue.forEach(q => q.status = 'idle');
+  renderQueue();
+  processQueue();
+});
+
+defringeSlider.addEventListener('input', (e) => {
+  const val = parseInt((e.target as HTMLInputElement).value, 10);
+  syncDefringeUI(val);
+});
+
+defringeSlider.addEventListener('change', () => {
   queue.forEach(q => q.status = 'idle');
   renderQueue();
   processQueue();
