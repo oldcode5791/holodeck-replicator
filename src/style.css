@@ -1,12 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #020617;
+    color: #f1f5f9;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom transparency canvas checkerboard */
+.transparency-check {
+  background-color: #0b0f17;
+  background-image: 
+    linear-gradient(45deg, #161e2e 25%, transparent 25%), 
+    linear-gradient(-45deg, #161e2e 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #161e2e 75%), 
+    linear-gradient(-45deg, transparent 75%, #161e2e 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+
 /* Interactive Info Popout (Right-anchored to prevent sidebar blowout) */
 .info-badge {
-  @apply relative inline-flex items-center justify-center;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .info-badge .info-content {
-  @apply invisible opacity-0 absolute bottom-full right-0 mb-2 w-64 p-3 
-         bg-slate-900 border border-slate-700/80 rounded-xl text-[11px] font-normal leading-relaxed 
-         text-slate-300 shadow-2xl backdrop-blur pointer-events-none transition-all duration-150 z-50;
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 0.5rem;
+  width: 15rem;
+  padding: 0.75rem;
+  background-color: #0f172a;
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 0.75rem;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.625;
+  color: #cbd5e1;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  z-index: 50;
 }
 
 /* Triangle caret pointing directly to the 'i' button on the right */
@@ -23,5 +67,7 @@
 /* Show on hover or focus */
 .info-badge:hover .info-content,
 .info-badge:focus-within .info-content {
-  @apply visible opacity-100 pointer-events-auto;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
 }
