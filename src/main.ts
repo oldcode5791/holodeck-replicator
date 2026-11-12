@@ -27,7 +27,7 @@ app.innerHTML = `
         <div>
           <span class="text-base font-bold tracking-tight text-white flex items-center gap-2">
             Holodeck Replicator
-            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400">v1.1</span>
+            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400">v1.2</span>
           </span>
           <p class="text-xs text-slate-400 hidden sm:block">100% Client-Side Image Matrix & Format Transcoder</p>
         </div>
@@ -56,10 +56,11 @@ app.innerHTML = `
               <label class="text-xs text-slate-400 font-medium">Output Format</label>
               <button type="button" data-info="format" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
             </div>
-            <div class="grid grid-cols-3 gap-2">
+            <div class="grid grid-cols-4 gap-1.5">
               <button data-format="image/webp" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">WebP</button>
               <button data-format="image/jpeg" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">JPEG</button>
               <button data-format="image/png" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">PNG</button>
+              <button data-format="image/gif" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">GIF</button>
             </div>
           </div>
 
@@ -167,20 +168,21 @@ app.innerHTML = `
 // Info Copy Registry
 const infoCopy: Record<string, string> = {
   format: `<strong class="text-white block mb-1">Export Format Guide</strong>
-           <b class="text-cyan-400">WebP:</b> Best size & quality for web, supports transparency.<br/>
-           <b class="text-amber-400">JPEG:</b> Universal support, lossy, no transparency.<br/>
-           <b class="text-emerald-400">PNG:</b> Lossless fidelity with full alpha channel.`,
+           <b class="text-cyan-400">WebP:</b> Modern web format with full 8-bit alpha transparency.<br/>
+           <b class="text-amber-400">JPEG:</b> Universally supported lossy format (no transparency).<br/>
+           <b class="text-emerald-400">PNG:</b> Lossless image fidelity with full alpha channel.<br/>
+           <b class="text-purple-400">GIF:</b> 256-colour raster image with 1-bit transparent index.`,
   quality: `<strong class="text-white block mb-1">Quality Encoding</strong>
-            Applies lossy compression to WebP and JPEG. 80–85% gives big file reductions with imperceptible loss. Disabled for lossless PNG.`,
+            Applies lossy compression to WebP and JPEG. 80–85% provides great reductions with imperceptible loss. Disabled for lossless PNG and palette-quantised GIF.`,
   alpha: `<strong class="text-white block mb-1">Alpha Channel Retention</strong>
-          When checked, transparent backgrounds in PNG, WebP, or GIF are preserved. If unchecked (or saving to JPEG), transparent areas flatten to the fallback matte.`,
+          When checked, transparent backgrounds in PNG, WebP, or GIF are preserved. For JPEG or when disabled, transparent regions flatten to the fallback matte colour.`,
   matte: `<strong class="text-white block mb-1">Matte Background</strong>
-          Fills transparent regions with a solid background colour to prevent black canvas artefacts when converting to JPEG.`,
+          Fills transparent regions with a solid background colour to prevent black canvas artefacts when converting to JPEG or flattening alpha.`,
   limits: `<strong class="text-white block mb-1">Aspect-Ratio Scaling</strong>
-           Enter a pixel ceiling to shrink oversized images. Aspect ratio is strictly preserved; smaller images will not be upscaled.`,
+           Enter a pixel ceiling to constrain oversized images. Aspect ratio is strictly preserved; images smaller than limits are never upscaled.`,
 };
 
-// Viewport-Clamped Popover Logic
+// Viewport-Clamped Popover Controller
 const popover = document.getElementById('global-info-popover') as HTMLDivElement;
 
 const showPopover = (trigger: HTMLElement) => {
@@ -194,14 +196,12 @@ const showPopover = (trigger: HTMLElement) => {
   const popRect = popover.getBoundingClientRect();
   const margin = 12;
 
-  // Position to the right of the button if room, otherwise clamp safely within viewport
   let left = rect.right + 10;
   if (left + popRect.width > window.innerWidth - margin) {
     left = Math.max(margin, rect.left - popRect.width / 2 + rect.width / 2);
   }
   left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
 
-  // Vertically align near the trigger, clamping inside top/bottom edges
   let top = rect.top - 8;
   if (top + popRect.height > window.innerHeight - margin) {
     top = window.innerHeight - popRect.height - margin;
@@ -249,7 +249,8 @@ const inputMaxW = document.getElementById('input-max-w') as HTMLInputElement;
 const inputMaxH = document.getElementById('input-max-h') as HTMLInputElement;
 
 const updateSettingsUI = () => {
-  if (currentSettings.targetFormat === 'image/png') {
+  const isLosslessOrPalette = currentSettings.targetFormat === 'image/png' || currentSettings.targetFormat === 'image/gif';
+  if (isLosslessOrPalette) {
     qualityContainer.classList.add('opacity-40', 'pointer-events-none');
   } else {
     qualityContainer.classList.remove('opacity-40', 'pointer-events-none');
@@ -475,7 +476,7 @@ queueGrid.addEventListener('click', (e) => {
     const item = queue.find(q => q.id === id);
     if (item && item.convertedBlob) {
       const ext = getExtensionForFormat(currentSettings.targetFormat);
-      const baseName = item.originalName.replace(/\.[^/.]+$/, "");
+      const baseName = item.originalName.replace(/\.[^/.]+$/, '');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(item.convertedBlob);
       a.download = `${baseName}_converted.${ext}`;

@@ -1,15 +1,15 @@
-export type OutputFormat = 'image/jpeg' | 'image/png' | 'image/webp';
+export type OutputFormat = 'image/webp' | 'image/jpeg' | 'image/png' | 'image/gif';
 
-export type MatteColor = 'transparent' | '#ffffff' | '#000000';
+export type MatteColor = '#ffffff' | '#000000' | 'transparent';
 
 export interface ConversionSettings {
   targetFormat: OutputFormat;
-  quality: number; // 0.1 to 1.0
+  quality: number;
+  preserveAlpha: boolean;
+  matteColor: MatteColor;
+  stripExif: boolean;
   maxWidth?: number;
   maxHeight?: number;
-  preserveAlpha: boolean;
-  matteColor: MatteColor; // Fallback matte if converting transparent image to JPEG
-  stripExif: boolean;
 }
 
 export type ConversionStatus = 'idle' | 'converting' | 'completed' | 'error';
@@ -22,8 +22,8 @@ export interface ImageQueueItem {
   originalType: string;
   previewUrl: string;
   status: ConversionStatus;
-  errorMessage?: string;
   convertedBlob?: Blob;
   convertedSize?: number;
   dimensions?: { width: number; height: number };
+  errorMessage?: string;
 }

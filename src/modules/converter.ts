@@ -1,6 +1,7 @@
 import heic2any from 'heic2any';
 import UTIF from 'utif';
 import { GifReader } from 'omggif';
+import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import type { ConversionSettings } from './types';
 
 /**
@@ -19,7 +20,6 @@ const decodeGifToBlob = async (buffer: ArrayBuffer): Promise<Blob> => {
   if (!ctx) throw new Error('Could not initialise Canvas context for GIF parsing.');
 
   const imgData = ctx.createImageData(width, height);
-  // Decode primary frame preserving transparent index
   reader.decodeAndBlitFrameRGBA(0, imgData.data);
   ctx.putImageData(imgData, 0, 0);
 
@@ -99,7 +99,7 @@ export const prepareImageSource = async (file: File): Promise<Blob> => {
 };
 
 /**
- * Core transformation pipeline using HTML5 Canvas
+ * Core transformation pipeline using HTML5 Canvas & gifenc
  */
 export const convertImageBlob = async (
   sourceBlob: Blob,
@@ -138,6 +138,37 @@ export const convertImageBlob = async (
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(imageBitmap, 0, 0, width, height);
 
+  // Custom client-side GIF export via gifenc
+  if (settings.targetFormat === 'image/gif') {
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+
+    const format = settings.preserveAlpha ? 'rgba4444' : 'rgb565';
+    const palette = quantize(data, 256, {
+      format,
+      oneBitAlpha: true,
+    });
+
+    const index = applyPalette(data, palette, format);
+
+    let transparentIndex = -1;
+    if (settings.preserveAlpha) {
+      transparentIndex = palette.findIndex((rgba: number[]) => rgba[3] === 0);
+    }
+
+    const gif = GIFEncoder();
+    gif.writeFrame(index, width, height, {
+      palette,
+      transparent: transparentIndex !== -1,
+      transparentIndex: transparentIndex !== -1 ? transparentIndex : 0,
+    });
+    gif.finish();
+
+    const gifBlob = new Blob([gif.bytes()], { type: 'image/gif' });
+    return { blob: gifBlob, dimensions: { width, height } };
+  }
+
+  // Standard browser-supported formats (WebP, PNG, JPEG)
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (resultBlob) => {
@@ -167,5 +198,6 @@ export const getExtensionForFormat = (format: ConversionSettings['targetFormat']
     case 'image/jpeg': return 'jpg';
     case 'image/png': return 'png';
     case 'image/webp': return 'webp';
+    case 'image/gif': return 'gif';
   }
 };
