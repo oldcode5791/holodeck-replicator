@@ -34,10 +34,10 @@ app.innerHTML = `
       </div>
 
       <div class="flex items-center gap-3">
-        <button id="btn-clear-queue" data-tooltip="Wipe queue and clear memory" class="hidden text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 px-3.5 rounded-lg border border-slate-700 transition-colors">
+        <button id="btn-clear-queue" class="hidden text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 px-3.5 rounded-lg border border-slate-700 transition-colors">
           Clear All
         </button>
-        <button id="btn-batch-download" data-tooltip="Package all converted assets into a ZIP file" class="hidden text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white py-2 px-4 rounded-lg shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5">
+        <button id="btn-batch-download" class="hidden text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white py-2 px-4 rounded-lg shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
           Download All (ZIP)
         </button>
@@ -51,55 +51,102 @@ app.innerHTML = `
           <h2 class="text-xs font-mono uppercase tracking-wider text-cyan-400 mb-3">Replication Parameters</h2>
           
           <!-- Target Format Selection -->
-          <div class="space-y-1.5 mb-5">
-            <label class="text-xs text-slate-400 font-medium">Output Format</label>
+          <div class="space-y-2 mb-5">
+            <div class="flex items-center justify-between">
+              <label class="text-xs text-slate-400 font-medium">Output Format</label>
+              <div class="info-badge">
+                <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                <div class="info-content">
+                  <strong class="text-white block mb-1">Export Format Guide</strong>
+                  <b class="text-cyan-400">WebP:</b> Best size & quality for web, supports transparency.<br/>
+                  <b class="text-amber-400">JPEG:</b> Universal support, lossy, no transparency.<br/>
+                  <b class="text-emerald-400">PNG:</b> Lossless image fidelity with full alpha channel.
+                </div>
+              </div>
+            </div>
             <div class="grid grid-cols-3 gap-2">
-              <button data-format="image/webp" data-tooltip="Modern web compression with full alpha" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">WebP</button>
-              <button data-format="image/jpeg" data-tooltip="Standard lossy format (no transparency)" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">JPEG</button>
-              <button data-format="image/png" data-tooltip="Lossless fidelity with transparent background" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">PNG</button>
+              <button data-format="image/webp" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">WebP</button>
+              <button data-format="image/jpeg" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">JPEG</button>
+              <button data-format="image/png" class="format-btn py-2 text-xs font-medium rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center">PNG</button>
             </div>
           </div>
 
           <!-- Quality Slider -->
           <div id="quality-container" class="space-y-1.5 mb-5">
             <div class="flex justify-between items-center text-xs">
-              <label class="text-slate-400 font-medium">Compression Quality</label>
+              <div class="flex items-center gap-1.5">
+                <label class="text-slate-400 font-medium">Compression Quality</label>
+                <div class="info-badge">
+                  <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                  <div class="info-content">
+                    <strong class="text-white block mb-1">Quality Encoding</strong>
+                    Applies lossy compression to WebP and JPEG. 80-85% provides significant file reduction with imperceptible loss. Disabled for lossless PNG.
+                  </div>
+                </div>
+              </div>
               <span id="quality-val" class="font-mono text-cyan-400">85%</span>
             </div>
-            <input type="range" id="quality-slider" min="10" max="100" value="85" step="5" data-tooltip="Adjust compression vs file footprint" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-2 rounded-lg" />
+            <input type="range" id="quality-slider" min="10" max="100" value="85" step="5" class="w-full accent-cyan-500 bg-slate-800 cursor-pointer h-2 rounded-lg" />
           </div>
 
           <!-- Transparency & Alpha Controls -->
           <div class="space-y-3 pt-4 border-t border-slate-800">
             <div class="flex items-center justify-between">
               <div>
-                <label class="text-xs font-medium text-slate-200 block">Preserve Transparency</label>
+                <div class="flex items-center gap-1.5">
+                  <label class="text-xs font-medium text-slate-200 block">Preserve Transparency</label>
+                  <div class="info-badge">
+                    <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                    <div class="info-content">
+                      <strong class="text-white block mb-1">Alpha Channel Retention</strong>
+                      When checked, transparent backgrounds in PNG, WebP, or GIF are preserved. If disabled (or saving to JPEG), transparent areas are flattened to the chosen fallback matte.
+                    </div>
+                  </div>
+                </div>
                 <span class="text-[11px] text-slate-400 block">Retain PNG/WebP/GIF alpha channels</span>
               </div>
-              <input type="checkbox" id="check-alpha" checked data-tooltip="Keep transparent background pixels" class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
+              <input type="checkbox" id="check-alpha" checked class="w-4 h-4 accent-cyan-500 rounded cursor-pointer" />
             </div>
 
             <!-- Matte Color Fallback -->
             <div id="matte-container" class="space-y-1.5 pt-2 hidden">
-              <label class="text-xs text-slate-400 font-medium">Fallback Matte</label>
+              <div class="flex items-center justify-between">
+                <label class="text-xs text-slate-400 font-medium">Fallback Matte</label>
+                <div class="info-badge">
+                  <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                  <div class="info-content">
+                    <strong class="text-white block mb-1">Matte Background</strong>
+                    Fills transparent regions with a solid background colour to prevent raw canvas black artifacts when converting to JPEG.
+                  </div>
+                </div>
+              </div>
               <div class="grid grid-cols-2 gap-2 text-xs">
-                <button data-matte="#ffffff" data-tooltip="Fills transparent areas with white" class="matte-btn py-1.5 px-2 rounded-lg border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-medium">White Matte</button>
-                <button data-matte="#000000" data-tooltip="Fills transparent areas with black" class="matte-btn py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 font-medium">Black Matte</button>
+                <button data-matte="#ffffff" class="matte-btn py-1.5 px-2 rounded-lg border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-medium">White Matte</button>
+                <button data-matte="#000000" class="matte-btn py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 font-medium">Black Matte</button>
               </div>
             </div>
           </div>
 
           <!-- Maximum Dimensions -->
           <div class="space-y-2 pt-4 border-t border-slate-800">
-            <label class="text-xs font-medium text-slate-200 block">Constraint Limits (Optional)</label>
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-medium text-slate-200 block">Constraint Limits (Optional)</label>
+              <div class="info-badge">
+                <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
+                <div class="info-content">
+                  <strong class="text-white block mb-1">Aspect-Ratio Scaling</strong>
+                  Enter a pixel limit to constrain oversized images. The aspect ratio is strictly preserved; images smaller than limits will not be upscaled.
+                </div>
+              </div>
+            </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <span class="text-[10px] text-slate-500 block mb-1">Max Width (px)</span>
-                <input type="number" id="input-max-w" placeholder="Auto" data-tooltip="Aspect-ratio preserved width ceiling" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
+                <input type="number" id="input-max-w" placeholder="Auto" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
               </div>
               <div>
                 <span class="text-[10px] text-slate-500 block mb-1">Max Height (px)</span>
-                <input type="number" id="input-max-h" placeholder="Auto" data-tooltip="Aspect-ratio preserved height ceiling" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
+                <input type="number" id="input-max-h" placeholder="Auto" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none" />
               </div>
             </div>
           </div>
@@ -131,11 +178,18 @@ app.innerHTML = `
       </main>
     </div>
 
-    <!-- Developer Support Pill -->
-    <a href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-900/95 hover:bg-slate-800 text-amber-300 font-medium text-xs border border-amber-500/40 hover:border-amber-400 shadow-xl backdrop-blur transition-all duration-300 hover:scale-105" data-tooltip="Support the developer on Buy Me a Coffee">
-      <span class="text-base leading-none">☕</span>
-      <span>Support the dev</span>
-    </a>
+    <!-- Developer Support Badge -->
+    <div class="fixed bottom-4 right-4 z-40">
+      <a 
+        href="https://buymeacoffee.com/curiouslyso" 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-amber-300 font-medium text-xs border border-amber-500/30 hover:border-amber-400/60 shadow-lg shadow-black/50 backdrop-blur transition-all duration-200 hover:scale-105"
+      >
+        <span class="text-sm select-none">☕</span>
+        <span class="text-[11px] tracking-wide text-slate-200 hover:text-amber-200">Support the dev</span>
+      </a>
+    </div>
   </div>
 `;
 
@@ -186,7 +240,7 @@ const renderQueue = () => {
   queueGrid.innerHTML = queue.map(item => `
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex gap-4 items-center relative overflow-hidden group">
       <!-- Checkerboard preview box -->
-      <div class="w-20 h-20 rounded-xl overflow-hidden shrink-0 transparency-check border border-slate-700/60 flex items-center justify-center relative" data-tooltip="${item.dimensions ? `${item.dimensions.width}x${item.dimensions.height}px` : 'Image preview'}">
+      <div class="w-20 h-20 rounded-xl overflow-hidden shrink-0 transparency-check border border-slate-700/60 flex items-center justify-center relative">
         <img src="${item.previewUrl}" alt="Preview" class="w-full h-full object-contain select-none" />
       </div>
 
@@ -213,7 +267,7 @@ const renderQueue = () => {
         ` : ''}
 
         ${item.status === 'completed' ? `
-          <button data-download="${item.id}" data-tooltip="Download converted ${getExtensionForFormat(currentSettings.targetFormat).toUpperCase()} file" class="btn-single-download text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium py-1 px-3 rounded-lg border border-slate-700 hover:border-cyan-500/40 transition-all inline-flex items-center gap-1">
+          <button data-download="${item.id}" class="btn-single-download text-[11px] bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium py-1 px-3 rounded-lg border border-slate-700 hover:border-cyan-500/40 transition-all inline-flex items-center gap-1">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
             Save ${getExtensionForFormat(currentSettings.targetFormat).toUpperCase()}
           </button>
@@ -227,7 +281,7 @@ const renderQueue = () => {
       </div>
 
       <!-- Delete from queue -->
-      <button data-remove="${item.id}" data-tooltip="Remove from queue" class="text-slate-500 hover:text-slate-300 p-1 rounded-lg transition-colors">
+      <button data-remove="${item.id}" title="Remove from queue" class="text-slate-500 hover:text-slate-300 p-1 rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
     </div>
