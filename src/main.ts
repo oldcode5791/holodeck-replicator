@@ -54,15 +54,7 @@ app.innerHTML = `
           <div class="space-y-2 mb-5">
             <div class="flex items-center justify-between">
               <label class="text-xs text-slate-400 font-medium">Output Format</label>
-              <div class="info-badge">
-                <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
-                <div class="info-content">
-                  <strong class="text-white block mb-1">Export Format Guide</strong>
-                  <b class="text-cyan-400">WebP:</b> Best size & quality for web, supports transparency.<br/>
-                  <b class="text-amber-400">JPEG:</b> Universal support, lossy, no transparency.<br/>
-                  <b class="text-emerald-400">PNG:</b> Lossless image fidelity with full alpha channel.
-                </div>
-              </div>
+              <button type="button" data-info="format" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
             </div>
             <div class="grid grid-cols-3 gap-2">
               <button data-format="image/webp" class="format-btn py-2 text-xs font-medium rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 transition-all text-center">WebP</button>
@@ -76,13 +68,7 @@ app.innerHTML = `
             <div class="flex justify-between items-center text-xs">
               <div class="flex items-center gap-1.5">
                 <label class="text-slate-400 font-medium">Compression Quality</label>
-                <div class="info-badge">
-                  <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
-                  <div class="info-content">
-                    <strong class="text-white block mb-1">Quality Encoding</strong>
-                    Applies lossy compression to WebP and JPEG. 80-85% provides significant file reduction with imperceptible loss. Disabled for lossless PNG.
-                  </div>
-                </div>
+                <button type="button" data-info="quality" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
               </div>
               <span id="quality-val" class="font-mono text-cyan-400">85%</span>
             </div>
@@ -95,13 +81,7 @@ app.innerHTML = `
               <div>
                 <div class="flex items-center gap-1.5">
                   <label class="text-xs font-medium text-slate-200 block">Preserve Transparency</label>
-                  <div class="info-badge">
-                    <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
-                    <div class="info-content">
-                      <strong class="text-white block mb-1">Alpha Channel Retention</strong>
-                      When checked, transparent backgrounds in PNG, WebP, or GIF are preserved. If disabled (or saving to JPEG), transparent areas are flattened to the chosen fallback matte.
-                    </div>
-                  </div>
+                  <button type="button" data-info="alpha" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
                 </div>
                 <span class="text-[11px] text-slate-400 block">Retain PNG/WebP/GIF alpha channels</span>
               </div>
@@ -112,13 +92,7 @@ app.innerHTML = `
             <div id="matte-container" class="space-y-1.5 pt-2 hidden">
               <div class="flex items-center justify-between">
                 <label class="text-xs text-slate-400 font-medium">Fallback Matte</label>
-                <div class="info-badge">
-                  <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
-                  <div class="info-content">
-                    <strong class="text-white block mb-1">Matte Background</strong>
-                    Fills transparent regions with a solid background colour to prevent raw canvas black artifacts when converting to JPEG.
-                  </div>
-                </div>
+                <button type="button" data-info="matte" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
               </div>
               <div class="grid grid-cols-2 gap-2 text-xs">
                 <button data-matte="#ffffff" class="matte-btn py-1.5 px-2 rounded-lg border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-medium">White Matte</button>
@@ -131,13 +105,7 @@ app.innerHTML = `
           <div class="space-y-2 pt-4 border-t border-slate-800">
             <div class="flex items-center justify-between">
               <label class="text-xs font-medium text-slate-200 block">Constraint Limits (Optional)</label>
-              <div class="info-badge">
-                <button type="button" class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
-                <div class="info-content">
-                  <strong class="text-white block mb-1">Aspect-Ratio Scaling</strong>
-                  Enter a pixel limit to constrain oversized images. The aspect ratio is strictly preserved; images smaller than limits will not be upscaled.
-                </div>
-              </div>
+              <button type="button" data-info="limits" class="info-trigger w-4 h-4 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-serif font-bold text-cyan-400 hover:bg-cyan-950 hover:border-cyan-500 flex items-center justify-center transition-colors">i</button>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
@@ -190,8 +158,81 @@ app.innerHTML = `
         <span class="text-[11px] tracking-wide text-slate-200 hover:text-amber-200">Support the dev</span>
       </a>
     </div>
+
+    <!-- Global Viewport-Clamped Popover -->
+    <div id="global-info-popover"></div>
   </div>
 `;
+
+// Info Copy Registry
+const infoCopy: Record<string, string> = {
+  format: `<strong class="text-white block mb-1">Export Format Guide</strong>
+           <b class="text-cyan-400">WebP:</b> Best size & quality for web, supports transparency.<br/>
+           <b class="text-amber-400">JPEG:</b> Universal support, lossy, no transparency.<br/>
+           <b class="text-emerald-400">PNG:</b> Lossless fidelity with full alpha channel.`,
+  quality: `<strong class="text-white block mb-1">Quality Encoding</strong>
+            Applies lossy compression to WebP and JPEG. 80–85% gives big file reductions with imperceptible loss. Disabled for lossless PNG.`,
+  alpha: `<strong class="text-white block mb-1">Alpha Channel Retention</strong>
+          When checked, transparent backgrounds in PNG, WebP, or GIF are preserved. If unchecked (or saving to JPEG), transparent areas flatten to the fallback matte.`,
+  matte: `<strong class="text-white block mb-1">Matte Background</strong>
+          Fills transparent regions with a solid background colour to prevent black canvas artefacts when converting to JPEG.`,
+  limits: `<strong class="text-white block mb-1">Aspect-Ratio Scaling</strong>
+           Enter a pixel ceiling to shrink oversized images. Aspect ratio is strictly preserved; smaller images will not be upscaled.`,
+};
+
+// Viewport-Clamped Popover Logic
+const popover = document.getElementById('global-info-popover') as HTMLDivElement;
+
+const showPopover = (trigger: HTMLElement) => {
+  const key = trigger.dataset.info;
+  if (!key || !infoCopy[key]) return;
+
+  popover.innerHTML = infoCopy[key];
+  popover.classList.add('visible');
+
+  const rect = trigger.getBoundingClientRect();
+  const popRect = popover.getBoundingClientRect();
+  const margin = 12;
+
+  // Position to the right of the button if room, otherwise clamp safely within viewport
+  let left = rect.right + 10;
+  if (left + popRect.width > window.innerWidth - margin) {
+    left = Math.max(margin, rect.left - popRect.width / 2 + rect.width / 2);
+  }
+  left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+
+  // Vertically align near the trigger, clamping inside top/bottom edges
+  let top = rect.top - 8;
+  if (top + popRect.height > window.innerHeight - margin) {
+    top = window.innerHeight - popRect.height - margin;
+  }
+  top = Math.max(margin, top);
+
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+};
+
+const hidePopover = () => {
+  popover.classList.remove('visible');
+};
+
+document.querySelectorAll('.info-trigger').forEach((btn) => {
+  const el = btn as HTMLElement;
+  el.addEventListener('mouseenter', () => showPopover(el));
+  el.addEventListener('mouseleave', hidePopover);
+  el.addEventListener('focus', () => showPopover(el));
+  el.addEventListener('blur', hidePopover);
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (popover.classList.contains('visible')) {
+      hidePopover();
+    } else {
+      showPopover(el);
+    }
+  });
+});
+
+document.addEventListener('click', hidePopover);
 
 // Element References
 const fileInput = document.getElementById('file-input') as HTMLInputElement;

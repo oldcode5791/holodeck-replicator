@@ -22,52 +22,28 @@
   background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
 }
 
-/* Interactive Info Popout (Right-anchored to prevent sidebar blowout) */
-.info-badge {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.info-badge .info-content {
-  visibility: hidden;
-  opacity: 0;
-  position: absolute;
-  bottom: 100%;
-  right: 0;
-  margin-bottom: 0.5rem;
-  width: 15rem;
+/* Global Viewport-Clamped Info Popover */
+#global-info-popover {
+  position: fixed;
+  width: 15.5rem;
   padding: 0.75rem;
   background-color: #0f172a;
-  border: 1px solid rgba(51, 65, 85, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 0.75rem;
   font-size: 11px;
   font-weight: 400;
-  line-height: 1.625;
+  line-height: 1.55;
   color: #cbd5e1;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
   pointer-events: none;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-  z-index: 50;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease, visibility 0.12s ease;
 }
 
-/* Triangle caret pointing directly to the 'i' button on the right */
-.info-badge .info-content::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 6px;
-  border-width: 5px;
-  border-style: solid;
-  border-color: #334155 transparent transparent transparent;
-}
-
-/* Show on hover or focus */
-.info-badge:hover .info-content,
-.info-badge:focus-within .info-content {
-  visibility: visible;
+#global-info-popover.visible {
   opacity: 1;
-  pointer-events: auto;
+  visibility: visible;
 }
