@@ -10,6 +10,8 @@
   },
   "devDependencies": {
     "@types/jszip": "^3.4.0",
+    "@types/omggif": "^1.0.5",
+    "@types/utif": "^3.0.6",
     "autoprefixer": "^10.6.2",
     "postcss": "^8.5.32",
     "tailwindcss": "^3.4.19",
@@ -18,6 +20,8 @@
   },
   "dependencies": {
     "heic2any": "^0.0.4",
-    "jszip": "^3.10.2"
+    "jszip": "^3.10.2",
+    "omggif": "^1.0.10",
+    "utif": "^3.1.0"
   }
 }
