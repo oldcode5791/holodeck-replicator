@@ -4,9 +4,6 @@ import { GifReader } from 'omggif';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import type { ConversionSettings } from './types';
 
-/**
- * Decodes an incoming GIF buffer with full transparency index preservation.
- */
 const decodeGifToBlob = async (buffer: ArrayBuffer): Promise<Blob> => {
   const bytes = new Uint8Array(buffer);
   const reader = new GifReader(bytes);
@@ -31,10 +28,6 @@ const decodeGifToBlob = async (buffer: ArrayBuffer): Promise<Blob> => {
   });
 };
 
-/**
- * Normalises an input file to a standard Blob.
- * Handles Apple HEIC/HEIF, TIFF, and GIF.
- */
 export const prepareImageSource = async (file: File): Promise<Blob> => {
   const fileName = file.name.toLowerCase();
 
@@ -95,8 +88,60 @@ export const prepareImageSource = async (file: File): Promise<Blob> => {
 };
 
 /**
- * Core transformation pipeline using HTML5 Canvas & gifenc
+ * Flood-fill (Magic Wand) erasure starting from a seed pixel (startX, startY)
  */
+const floodFillErase = (
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  startX: number,
+  startY: number,
+  targetR: number,
+  targetG: number,
+  targetB: number,
+  tolerance: number
+) => {
+  const visited = new Uint8Array(width * height);
+  const stack = new Int32Array(width * height);
+  let ptr = 0;
+
+  const push = (x: number, y: number) => {
+    const idx = y * width + x;
+    if (visited[idx]) return;
+    visited[idx] = 1;
+    stack[ptr++] = idx;
+  };
+
+  push(startX, startY);
+
+  while (ptr > 0) {
+    const idx = stack[--ptr];
+    const p = idx * 4;
+
+    const r = data[p];
+    const g = data[p + 1];
+    const b = data[p + 2];
+
+    const dist = Math.sqrt(
+      (r - targetR) ** 2 +
+      (g - targetG) ** 2 +
+      (b - targetB) ** 2
+    );
+
+    if (dist <= tolerance) {
+      data[p + 3] = 0; // Wipe pixel alpha to 0
+
+      const x = idx % width;
+      const y = (idx - x) / width;
+
+      if (x > 0) push(x - 1, y);
+      if (x < width - 1) push(x + 1, y);
+      if (y > 0) push(x, y - 1);
+      if (y < height - 1) push(x, y + 1);
+    }
+  }
+};
+
 export const convertImageBlob = async (
   sourceBlob: Blob,
   settings: ConversionSettings
@@ -122,7 +167,6 @@ export const convertImageBlob = async (
     throw new Error('Could not initialise Canvas 2D rendering context');
   }
 
-  // Pre-fill background if flattening alpha for non-knockout JPEG
   const isTargetJpeg = settings.targetFormat === 'image/jpeg';
   if ((isTargetJpeg || !settings.preserveAlpha) && !settings.removeBackground) {
     ctx.fillStyle = settings.matteColor === 'transparent' ? '#ffffff' : settings.matteColor;
@@ -135,14 +179,23 @@ export const convertImageBlob = async (
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(imageBitmap, 0, 0, width, height);
 
-  // Chroma-Key Background Eraser Pass
+  // Chroma-Key / Eyedropper Background Eraser Pass
   if (settings.removeBackground) {
     const imgData = ctx.getImageData(0, 0, width, height);
     const data = imgData.data;
 
-    let targetR = data[0];
-    let targetG = data[1];
-    let targetB = data[2];
+    // Determine seed coordinates (eyedropper click or top-left 0,0)
+    const seedX = settings.samplePoint
+      ? Math.min(width - 1, Math.max(0, Math.round(settings.samplePoint.x * width)))
+      : 0;
+    const seedY = settings.samplePoint
+      ? Math.min(height - 1, Math.max(0, Math.round(settings.samplePoint.y * height)))
+      : 0;
+    const seedOffset = (seedY * width + seedX) * 4;
+
+    let targetR = data[seedOffset];
+    let targetG = data[seedOffset + 1];
+    let targetB = data[seedOffset + 2];
 
     if (settings.bgTargetColor && settings.bgTargetColor !== 'auto') {
       const hex = settings.bgTargetColor.replace('#', '');
@@ -151,22 +204,22 @@ export const convertImageBlob = async (
       targetB = parseInt(hex.substring(4, 6), 16);
     }
 
-    // Map 0-100 tolerance to Euclidean color distance (max 441.67)
     const tolerance = settings.bgTolerance * 4.41;
 
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      const distance = Math.sqrt(
-        (r - targetR) ** 2 +
-        (g - targetG) ** 2 +
-        (b - targetB) ** 2
-      );
-
-      if (distance <= tolerance) {
-        data[i + 3] = 0; // Transparent
+    if (settings.bgContiguous) {
+      // Magic Wand contiguous flood-fill from seed pixel
+      floodFillErase(data, width, height, seedX, seedY, targetR, targetG, targetB, tolerance);
+    } else {
+      // Global colour wipe across entire canvas
+      for (let i = 0; i < data.length; i += 4) {
+        const distance = Math.sqrt(
+          (data[i] - targetR) ** 2 +
+          (data[i + 1] - targetG) ** 2 +
+          (data[i + 2] - targetB) ** 2
+        );
+        if (distance <= tolerance) {
+          data[i + 3] = 0;
+        }
       }
     }
 

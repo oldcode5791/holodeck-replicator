@@ -11,8 +11,10 @@ export interface ConversionSettings {
   maxWidth?: number;
   maxHeight?: number;
   removeBackground: boolean;
-  bgTargetColor: string; // 'auto', or hex like '#ffffff'
-  bgTolerance: number; // 0 to 100
+  bgTargetColor: string;
+  bgTolerance: number;
+  bgContiguous: boolean;
+  samplePoint?: { x: number; y: number };
 }
 
 export type ConversionStatus = 'idle' | 'converting' | 'completed' | 'error';
@@ -23,6 +25,7 @@ export interface ImageQueueItem {
   originalName: string;
   originalSize: number;
   originalType: string;
+  originalUrl: string;
   previewUrl: string;
   status: ConversionStatus;
   convertedBlob?: Blob;
