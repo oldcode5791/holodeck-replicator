@@ -87,9 +87,15 @@ export const prepareImageSource = async (file: File): Promise<Blob> => {
   return file;
 };
 
-/**
- * Flood-fill (Magic Wand) erasure starting from a seed pixel (startX, startY)
- */
+const hexToRgb = (hex: string): [number, number, number] => {
+  const clean = hex.replace('#', '');
+  return [
+    parseInt(clean.substring(0, 2), 16),
+    parseInt(clean.substring(2, 4), 16),
+    parseInt(clean.substring(4, 6), 16),
+  ];
+};
+
 const floodFillErase = (
   data: Uint8ClampedArray,
   width: number,
@@ -118,18 +124,16 @@ const floodFillErase = (
     const idx = stack[--ptr];
     const p = idx * 4;
 
-    const r = data[p];
-    const g = data[p + 1];
-    const b = data[p + 2];
+    if (data[p + 3] === 0) continue; // Already transparent
 
     const dist = Math.sqrt(
-      (r - targetR) ** 2 +
-      (g - targetG) ** 2 +
-      (b - targetB) ** 2
+      (data[p] - targetR) ** 2 +
+      (data[p + 1] - targetG) ** 2 +
+      (data[p + 2] - targetB) ** 2
     );
 
     if (dist <= tolerance) {
-      data[p + 3] = 0; // Wipe pixel alpha to 0
+      data[p + 3] = 0;
 
       const x = idx % width;
       const y = (idx - x) / width;
@@ -140,6 +144,72 @@ const floodFillErase = (
       if (y < height - 1) push(x, y + 1);
     }
   }
+};
+
+const globalColorErase = (
+  data: Uint8ClampedArray,
+  targetR: number,
+  targetG: number,
+  targetB: number,
+  tolerance: number
+) => {
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue;
+    const distance = Math.sqrt(
+      (data[i] - targetR) ** 2 +
+      (data[i + 1] - targetG) ** 2 +
+      (data[i + 2] - targetB) ** 2
+    );
+    if (distance <= tolerance) {
+      data[i + 3] = 0;
+    }
+  }
+};
+
+/**
+ * Shared knockout pass used by both the batch encoder and the live Eyedropper preview
+ */
+export const applyBackgroundKnockout = (
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  settings: ConversionSettings
+) => {
+  const imgData = ctx.getImageData(0, 0, width, height);
+  const data = imgData.data;
+  const tolerance = settings.bgTolerance * 4.41;
+
+  // If user clicked one or more points with the eyedropper, process every point
+  if (settings.samplePoints && settings.samplePoints.length > 0) {
+    for (const pt of settings.samplePoints) {
+      const seedX = Math.min(width - 1, Math.max(0, Math.round(pt.x * width)));
+      const seedY = Math.min(height - 1, Math.max(0, Math.round(pt.y * height)));
+      const [r, g, b] = hexToRgb(pt.color);
+
+      if (settings.bgContiguous) {
+        floodFillErase(data, width, height, seedX, seedY, r, g, b, tolerance);
+      } else {
+        globalColorErase(data, r, g, b, tolerance);
+      }
+    }
+  } else {
+    // Fallback to single auto/preset colour from (0,0)
+    let targetR = data[0];
+    let targetG = data[1];
+    let targetB = data[2];
+
+    if (settings.bgTargetColor && settings.bgTargetColor !== 'auto') {
+      [targetR, targetG, targetB] = hexToRgb(settings.bgTargetColor);
+    }
+
+    if (settings.bgContiguous) {
+      floodFillErase(data, width, height, 0, 0, targetR, targetG, targetB, tolerance);
+    } else {
+      globalColorErase(data, targetR, targetG, targetB, tolerance);
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
 };
 
 export const convertImageBlob = async (
@@ -179,54 +249,10 @@ export const convertImageBlob = async (
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(imageBitmap, 0, 0, width, height);
 
-  // Chroma-Key / Eyedropper Background Eraser Pass
   if (settings.removeBackground) {
-    const imgData = ctx.getImageData(0, 0, width, height);
-    const data = imgData.data;
-
-    // Determine seed coordinates (eyedropper click or top-left 0,0)
-    const seedX = settings.samplePoint
-      ? Math.min(width - 1, Math.max(0, Math.round(settings.samplePoint.x * width)))
-      : 0;
-    const seedY = settings.samplePoint
-      ? Math.min(height - 1, Math.max(0, Math.round(settings.samplePoint.y * height)))
-      : 0;
-    const seedOffset = (seedY * width + seedX) * 4;
-
-    let targetR = data[seedOffset];
-    let targetG = data[seedOffset + 1];
-    let targetB = data[seedOffset + 2];
-
-    if (settings.bgTargetColor && settings.bgTargetColor !== 'auto') {
-      const hex = settings.bgTargetColor.replace('#', '');
-      targetR = parseInt(hex.substring(0, 2), 16);
-      targetG = parseInt(hex.substring(2, 4), 16);
-      targetB = parseInt(hex.substring(4, 6), 16);
-    }
-
-    const tolerance = settings.bgTolerance * 4.41;
-
-    if (settings.bgContiguous) {
-      // Magic Wand contiguous flood-fill from seed pixel
-      floodFillErase(data, width, height, seedX, seedY, targetR, targetG, targetB, tolerance);
-    } else {
-      // Global colour wipe across entire canvas
-      for (let i = 0; i < data.length; i += 4) {
-        const distance = Math.sqrt(
-          (data[i] - targetR) ** 2 +
-          (data[i + 1] - targetG) ** 2 +
-          (data[i + 2] - targetB) ** 2
-        );
-        if (distance <= tolerance) {
-          data[i + 3] = 0;
-        }
-      }
-    }
-
-    ctx.putImageData(imgData, 0, 0);
+    applyBackgroundKnockout(ctx, width, height, settings);
   }
 
-  // Export to GIF via gifenc
   if (settings.targetFormat === 'image/gif') {
     const imgData = ctx.getImageData(0, 0, width, height);
     const data = imgData.data;
@@ -257,7 +283,6 @@ export const convertImageBlob = async (
     return { blob: gifBlob, dimensions: { width, height } };
   }
 
-  // Export to WebP, PNG, or JPEG
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (resultBlob) => {

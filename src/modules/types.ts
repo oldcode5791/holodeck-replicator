@@ -2,6 +2,12 @@ export type OutputFormat = 'image/webp' | 'image/jpeg' | 'image/png' | 'image/gi
 
 export type MatteColor = '#ffffff' | '#000000' | 'transparent';
 
+export interface SamplePoint {
+  x: number; // normalised 0..1
+  y: number; // normalised 0..1
+  color: string; // hex sampled at click
+}
+
 export interface ConversionSettings {
   targetFormat: OutputFormat;
   quality: number;
@@ -11,10 +17,10 @@ export interface ConversionSettings {
   maxWidth?: number;
   maxHeight?: number;
   removeBackground: boolean;
-  bgTargetColor: string;
-  bgTolerance: number;
+  bgTargetColor: string; // 'auto', or hex like '#ffffff'
+  bgTolerance: number; // 0 to 100
   bgContiguous: boolean;
-  samplePoint?: { x: number; y: number };
+  samplePoints: SamplePoint[];
 }
 
 export type ConversionStatus = 'idle' | 'converting' | 'completed' | 'error';
