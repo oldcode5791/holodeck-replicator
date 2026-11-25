@@ -1,14 +1,16 @@
 {
   "name": "holodeck-replicator",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.69.0",
     "@types/jszip": "^3.4.0",
     "@types/omggif": "^1.0.5",
     "@types/utif": "^3.0.6",
@@ -16,7 +18,8 @@
     "postcss": "^8.5.32",
     "tailwindcss": "^3.4.19",
     "typescript": "~7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "wrangler": "^4.160.1"
   },
   "dependencies": {
     "gifenc": "^1.0.3",
